@@ -4,8 +4,9 @@
  * AI Setter
  *
  * Per-account control room for the AI DM setter: operating mode, persona
- * and goal, knowledge-base access, safety thresholds, plus the review
- * queue and activity feed.
+ * and goal, knowledge-base access, safety thresholds, the review queue
+ * and activity feed (Setup), the owner's voice (Sprachprofil), and which
+ * model provider drafts the replies (Models).
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -13,38 +14,24 @@ import AccountSelect, { type AccountOption } from "@/components/account-select";
 import AiSetterActivity, {
   type AiReplyItem,
 } from "@/components/ai-setter-activity";
+import SetupPanel from "@/components/ai-setter/setup-panel";
+import VoiceProfilePanel from "@/components/ai-setter/voice-profile-panel";
+import ModelProviderPanel from "@/components/ai-setter/model-provider-panel";
+import {
+  DEFAULT_FORM,
+  SaveBar,
+  type SetterConfigForm,
+} from "@/components/ai-setter/form";
 
 const POLL_MS = 15_000;
 
-interface SetterConfigForm {
-  mode: "OFF" | "DRAFT" | "AUTO";
-  persona: string;
-  goal: string;
-  bookingLink: string;
-  language: string;
-  knowledgeEnabled: boolean;
-  styleExamplesEnabled: boolean;
-  minConfidence: number;
-  replyDelaySeconds: number;
-  pauseOnHumanReply: boolean;
-  windowNudgeEnabled: boolean;
-  windowNudgeHours: number;
-}
+type Tab = "setup" | "voice" | "models";
 
-const DEFAULT_FORM: SetterConfigForm = {
-  mode: "OFF",
-  persona: "",
-  goal: "",
-  bookingLink: "",
-  language: "",
-  knowledgeEnabled: true,
-  styleExamplesEnabled: true,
-  minConfidence: 0.78,
-  replyDelaySeconds: 10,
-  pauseOnHumanReply: true,
-  windowNudgeEnabled: false,
-  windowNudgeHours: 20,
-};
+const TABS: Array<{ value: Tab; label: string }> = [
+  { value: "setup", label: "Setup" },
+  { value: "voice", label: "Sprachprofil" },
+  { value: "models", label: "Models" },
+];
 
 const MODES: Array<{
   value: SetterConfigForm["mode"];
@@ -68,55 +55,20 @@ const MODES: Array<{
   },
 ];
 
-function Toggle({
-  checked,
-  onChange,
-  label,
-  hint,
-}: {
-  checked: boolean;
-  onChange: (value: boolean) => void;
-  label: string;
-  hint: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-start justify-between gap-4 rounded-xl border border-border bg-surface px-4 py-3 text-left hover:border-border-hover"
-    >
-      <span>
-        <span className="block text-sm text-foreground">{label}</span>
-        <span className="mt-0.5 block text-xs text-muted">{hint}</span>
-      </span>
-      <span
-        className={`mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
-          checked ? "bg-accent" : "bg-surface-hover"
-        }`}
-      >
-        <span
-          className={`h-4 w-4 rounded-full bg-white transition-transform ${
-            checked ? "translate-x-4" : "translate-x-0"
-          }`}
-        />
-      </span>
-    </button>
-  );
-}
-
 export default function AiSetterPage() {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [tab, setTab] = useState<Tab>("setup");
 
   const [form, setForm] = useState<SetterConfigForm>(DEFAULT_FORM);
+  const [defaultVoiceRules, setDefaultVoiceRules] = useState("");
   const [knowledgeBackend, setKnowledgeBackend] = useState<
     "supabase" | "sqlite" | null
   >(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [replies, setReplies] = useState<AiReplyItem[]>([]);
   const [repliesLoading, setRepliesLoading] = useState(true);
@@ -150,7 +102,9 @@ export default function AiSetterPage() {
       .then((payload) => {
         if (!payload.success) return;
         const config = payload.data.config;
+        const builtInRules: string = payload.data.defaultVoiceRules ?? "";
         setKnowledgeBackend(payload.data.knowledgeBackend ?? null);
+        setDefaultVoiceRules(builtInRules);
         setForm({
           mode: config.mode,
           persona: config.persona ?? "",
@@ -164,6 +118,11 @@ export default function AiSetterPage() {
           pauseOnHumanReply: config.pauseOnHumanReply,
           windowNudgeEnabled: config.windowNudgeEnabled ?? false,
           windowNudgeHours: config.windowNudgeHours ?? 20,
+          voiceRules: config.voiceRules ?? builtInRules,
+          styleCorpusEnabled: config.styleCorpusEnabled ?? true,
+          strictVoiceEvidence: config.strictVoiceEvidence ?? false,
+          llmProvider: config.llmProvider ?? "",
+          llmModel: config.llmModel ?? "",
         });
       })
       .finally(() => setConfigLoading(false));
@@ -203,6 +162,7 @@ export default function AiSetterPage() {
     if (!selectedAccountId || saving) return;
     setSaving(true);
     setSaveState("idle");
+    setSaveError(null);
     try {
       const res = await fetch("/api/ai-setter/config", {
         method: "PUT",
@@ -222,10 +182,16 @@ export default function AiSetterPage() {
           windowNudgeEnabled: form.windowNudgeEnabled,
           windowNudgeHours: form.windowNudgeHours,
           blockedUserIds: [],
+          voiceRules: form.voiceRules,
+          styleCorpusEnabled: form.styleCorpusEnabled,
+          strictVoiceEvidence: form.strictVoiceEvidence,
+          llmProvider: form.llmProvider || null,
+          llmModel: form.llmModel || null,
         }),
       });
       const data = await res.json();
       setSaveState(data.success ? "saved" : "error");
+      if (!data.success) setSaveError(data.error ?? null);
     } catch {
       setSaveState("error");
     } finally {
@@ -244,12 +210,24 @@ export default function AiSetterPage() {
   const held = replies.filter((r) => r.status === "HELD");
   const recent = replies.filter((r) => r.status !== "HELD").slice(0, 25);
 
+  const saveBar = (
+    <SaveBar
+      saving={saving}
+      saveState={saveState}
+      errorMessage={saveError}
+      disabled={!selectedAccountId || configLoading}
+      onSave={() => void handleSave()}
+    />
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">AI Setter</h1>
-          <p className="mt-1 text-sm text-muted">
+        <div className="min-w-0">
+          <h1 className="hidden text-lg font-semibold text-foreground sm:block">
+            AI Setter
+          </h1>
+          <p className="text-sm text-muted sm:mt-1">
             An AI that answers your DMs in your voice, qualifies prospects,
             and books the right ones.
           </p>
@@ -265,7 +243,7 @@ export default function AiSetterPage() {
       </div>
 
       {/* Mode selector */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {MODES.map((mode) => {
           const isActive = form.mode === mode.value;
           return (
@@ -274,7 +252,7 @@ export default function AiSetterPage() {
               type="button"
               onClick={() => update("mode", mode.value)}
               aria-pressed={isActive}
-              className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+              className={`min-h-11 min-w-0 rounded-xl border px-3 py-2.5 text-left transition-colors sm:px-4 sm:py-3 ${
                 isActive
                   ? "border-accent/60 bg-accent/10"
                   : "border-border bg-surface hover:border-border-hover"
@@ -287,201 +265,88 @@ export default function AiSetterPage() {
               >
                 {mode.label}
               </span>
-              <span className="mt-1 block text-xs text-muted">
+              <span className="mt-1 hidden text-xs text-muted sm:block">
                 {mode.description}
               </span>
             </button>
           );
         })}
       </div>
+      <p className="-mt-3 text-xs text-muted sm:hidden">
+        {MODES.find((mode) => mode.value === form.mode)?.description}{" "}
+        Changes apply after saving.
+      </p>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]">
-        {/* Settings */}
-        <div className="space-y-4">
-          {configLoading ? (
-            <p className="text-sm text-muted">Loading configuration…</p>
-          ) : (
-            <>
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-                  Who you are
+      {/* Tabs scroll sideways on narrow screens instead of wrapping. */}
+      <div
+        role="tablist"
+        aria-label="AI Setter sections"
+        className="-mx-4 flex gap-1 overflow-x-auto border-b border-border px-4 lg:mx-0 lg:px-0"
+      >
+        {TABS.map((item) => {
+          const isActive = tab === item.value;
+          return (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              id={`tab-${item.value}`}
+              aria-selected={isActive}
+              aria-controls={`panel-${item.value}`}
+              onClick={() => setTab(item.value)}
+              className={`-mb-px min-h-11 shrink-0 border-b-2 px-3 text-sm ${
+                isActive
+                  ? "border-accent font-medium text-foreground"
+                  : "border-transparent text-muted hover:text-foreground"
+              }`}
+            >
+              {item.label}
+              {item.value === "setup" && held.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning">
+                  {held.length}
                 </span>
-                <textarea
-                  value={form.persona}
-                  onChange={(e) => update("persona", e.target.value)}
-                  rows={4}
-                  placeholder="Your positioning, offer, audience, and how you talk. The setter grounds every reply in this."
-                  className="mt-2 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-                  Setter goal
-                </span>
-                <textarea
-                  value={form.goal}
-                  onChange={(e) => update("goal", e.target.value)}
-                  rows={2}
-                  placeholder="e.g. Qualify for the mentorship (already running a business, 2k+ budget) and book a call."
-                  className="mt-2 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
-                />
-              </label>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-                    Booking link
-                  </span>
-                  <input
-                    value={form.bookingLink}
-                    onChange={(e) => update("bookingLink", e.target.value)}
-                    placeholder="https://cal.com/you/call"
-                    className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-                    Reply language
-                  </span>
-                  <select
-                    value={form.language}
-                    onChange={(e) => update("language", e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent/40 focus:outline-none"
-                  >
-                    <option value="">Match the incoming message</option>
-                    <option value="German">Always German</option>
-                    <option value="English">Always English</option>
-                  </select>
-                </label>
-              </div>
-
-              <Toggle
-                checked={form.knowledgeEnabled}
-                onChange={(v) => update("knowledgeEnabled", v)}
-                label="Second brain"
-                hint={
-                  knowledgeBackend === "supabase"
-                    ? "Pull facts about you and your offer from your connected Supabase knowledge base."
-                    : knowledgeBackend === "sqlite"
-                      ? "Pull facts about you and your offer from your local knowledge base file."
-                      : "No knowledge base yet. Create one in 2 minutes: drop markdown files about you and your offer into ./knowledge on the server, then run: npm run knowledge:ingest -- ./knowledge (or connect Supabase, see docs/ai-setter.md)."
-                }
-              />
-              <Toggle
-                checked={form.styleExamplesEnabled}
-                onChange={(v) => update("styleExamplesEnabled", v)}
-                label="Style memory"
-                hint="Imitate phrasing from your indexed message history, so replies sound like you texted them."
-              />
-              <Toggle
-                checked={form.pauseOnHumanReply}
-                onChange={(v) => update("pauseOnHumanReply", v)}
-                label="Step aside for humans"
-                hint="When you reply to a thread yourself, the setter stays out of it for a few hours."
-              />
-              <Toggle
-                checked={form.windowNudgeEnabled}
-                onChange={(v) => update("windowNudgeEnabled", v)}
-                label="Follow-up nudge"
-                hint={`If a prospect goes quiet, send one gentle follow-up after ${form.windowNudgeHours}h, before Instagram's 24h reply window closes. Draft mode holds it for review.`}
-              />
-              {form.windowNudgeEnabled && (
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-                    Nudge after (hours of silence)
-                  </span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={23}
-                    value={form.windowNudgeHours}
-                    onChange={(e) =>
-                      update(
-                        "windowNudgeHours",
-                        Math.max(1, Math.min(23, Math.trunc(Number(e.target.value) || 20)))
-                      )
-                    }
-                    className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent/40 focus:outline-none"
-                  />
-                </label>
               )}
+            </button>
+          );
+        })}
+      </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="flex items-baseline justify-between text-xs font-semibold uppercase tracking-wide text-faint">
-                    Confidence to auto-send
-                    <span className="tabular-nums text-muted">
-                      {Math.round(form.minConfidence * 100)}%
-                    </span>
-                  </span>
-                  <input
-                    type="range"
-                    min={0.5}
-                    max={0.95}
-                    step={0.01}
-                    value={form.minConfidence}
-                    onChange={(e) =>
-                      update("minConfidence", Number(e.target.value))
-                    }
-                    className="mt-3 w-full accent-[--color-accent]"
-                  />
-                  <span className="mt-1 block text-xs text-muted">
-                    Below this the reply is held for review instead of sent.
-                  </span>
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-faint">
-                    Reply delay (seconds)
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={600}
-                    value={form.replyDelaySeconds}
-                    onChange={(e) =>
-                      update(
-                        "replyDelaySeconds",
-                        Math.max(0, Math.min(600, Number(e.target.value) || 0))
-                      )
-                    }
-                    className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent/40 focus:outline-none"
-                  />
-                  <span className="mt-1 block text-xs text-muted">
-                    Lets rapid-fire messages collapse into one reply.
-                  </span>
-                </label>
-              </div>
-
-              <div className="flex items-center gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => void handleSave()}
-                  disabled={saving || !selectedAccountId}
-                  className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-                >
-                  {saving ? "Saving…" : "Save settings"}
-                </button>
-                {saveState === "saved" && (
-                  <span className="text-sm text-success">Saved.</span>
-                )}
-                {saveState === "error" && (
-                  <span className="text-sm text-error">
-                    Could not save, try again.
-                  </span>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Review queue + activity */}
-        <AiSetterActivity
-          held={held}
-          recent={recent}
-          loading={repliesLoading}
-          onRefresh={() => void loadReplies(true)}
-        />
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+        {configLoading ? (
+          <p className="text-sm text-muted">Loading configuration…</p>
+        ) : tab === "setup" ? (
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]">
+            {/* On phones the review queue comes first: it is what needs a thumb. */}
+            <div className="order-2 min-w-0 lg:order-1">
+              <SetupPanel
+                form={form}
+                update={update}
+                knowledgeBackend={knowledgeBackend}
+                saveBar={saveBar}
+              />
+            </div>
+            <div className="order-1 min-w-0 lg:order-2">
+              <AiSetterActivity
+                held={held}
+                recent={recent}
+                loading={repliesLoading}
+                onRefresh={() => void loadReplies(true)}
+              />
+            </div>
+          </div>
+        ) : tab === "voice" ? (
+          selectedAccountId && (
+            <VoiceProfilePanel
+              accountId={selectedAccountId}
+              form={form}
+              update={update}
+              defaultVoiceRules={defaultVoiceRules}
+              saveBar={saveBar}
+            />
+          )
+        ) : (
+          <ModelProviderPanel form={form} update={update} saveBar={saveBar} />
+        )}
       </div>
     </div>
   );

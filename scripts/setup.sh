@@ -52,6 +52,8 @@ WEBHOOK_VERIFY_TOKEN=$(rand 16)
 AI_SETTER_PROVIDER=anthropic
 AI_SETTER_MODEL=claude-opus-5
 ANTHROPIC_API_KEY=
+# Encrypts provider keys saved in the AI Setter UI
+AI_CREDENTIALS_ENCRYPTION_KEY=$(rand 32)
 
 # Knowledge base (optional) - see docs/ai-setter.md
 SECOND_BRAIN_SUPABASE_URL=

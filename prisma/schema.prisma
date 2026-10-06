@@ -84,6 +84,7 @@ model Workspace {
   linkClicks        LinkClick[]
   webhookEvents     WebhookEvent[]
   operationalEvents OperationalEvent[]
+  aiProviderCredentials AiProviderCredential[]
 
   @@index([ownerId])
 }
@@ -144,6 +145,8 @@ model InstagramAccount {
   aiSetterConfig   AiSetterConfig?
   dmConversations  DmConversation[]
   aiReplyLogs      AiReplyLog[]
+  styleCorpusEntries StyleCorpusEntry[]
+  voiceCorrections   VoiceCorrection[]
 
   @@index([workspaceId])
 }
@@ -380,6 +383,21 @@ model AiSetterConfig {
   /// IGSIDs the setter must never reply to.
   blockedUserIds String[] @default([])
 
+  /// Sprachprofil: the owner's editable voice rules. Null uses the
+  /// built-in style guide.
+  voiceRules String?
+  /// Retrieve examples from the local style corpus (own human-typed DMs).
+  styleCorpusEnabled Boolean @default(true)
+  /// Auto-send only in threads where the owner has typed at least one
+  /// message by hand (the WhatsApp sidecar's strict voice rule).
+  strictVoiceEvidence Boolean @default(false)
+  /// When the style corpus was last rebuilt from mirrored DMs.
+  styleCorpusBuiltAt DateTime?
+  /// Model provider chosen in the UI; null keeps the env-based provider.
+  llmProvider String?
+  /// Model id for llmProvider; null uses the provider's saved default.
+  llmModel String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -414,6 +432,8 @@ model DmConversation {
   instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
   messages         DmMessage[]
   aiReplies        AiReplyLog[]
+  voiceCorrections   VoiceCorrection[]
+  styleCorpusEntries StyleCorpusEntry[]
 
   @@unique([instagramAccountId, participantId])
   @@index([instagramAccountId, lastInboundAt])
@@ -436,6 +456,72 @@ model DmMessage {
   @@index([conversationId, sentAt])
 }
 
+/// Private style corpus: the owner's own human-typed outbound Instagram
+/// DMs, derived only from the local mirror. Never AI, campaign, or
+/// participant text; contact details are redacted at build time.
+model StyleCorpusEntry {
+  id                 String   @id @default(cuid())
+  instagramAccountId String
+  conversationId     String
+  /// DmMessage.id this entry was derived from.
+  sourceMessageId    String   @unique
+  /// Redacted human-typed outbound text. Prospect messages are never
+  /// stored here: examples are shared across contacts.
+  text               String
+  /// de | en | pt | unknown
+  language           String
+  sentAt             DateTime
+  createdAt          DateTime @default(now())
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  conversation     DmConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([instagramAccountId, language, sentAt])
+}
+
+/// Contact-scoped voice feedback: applies only to the conversation it
+/// was recorded for, never as a global training signal.
+model VoiceCorrection {
+  id                 String              @id @default(cuid())
+  instagramAccountId String
+  conversationId     String
+  /// Set when the correction came from editing a held draft.
+  replyLogId         String?             @unique
+  kind               VoiceCorrectionKind
+  avoidText          String?
+  preferText         String?
+  note               String?
+  createdAt          DateTime            @default(now())
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  conversation     DmConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([instagramAccountId, createdAt])
+}
+
+/// Model-provider API keys, encrypted at rest (AES-256-GCM, key from
+/// AI_CREDENTIALS_ENCRYPTION_KEY, bound to workspace + provider). The
+/// plaintext key is never returned to the browser.
+model AiProviderCredential {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  /// anthropic | openai | gemini | xai | openrouter | openai-compatible
+  provider        String
+  encryptedKey    String
+  /// Truncated SHA-256 of the key so the owner can tell keys apart.
+  keyFingerprint  String
+  baseUrl         String?
+  defaultModel    String?
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider])
+}
+
 /// Every AI draft the setter produced, whether it was sent, held for review,
 /// or skipped — the audit trail behind the dashboard activity feed.
 model AiReplyLog {
@@ -455,8 +541,8 @@ model AiReplyLog {
   status       AiReplyStatus @default(PENDING)
   sentMid      String?
   sentAt       DateTime?
-  /// True when a human edited the draft before approving. Edited sends
-  /// count as the owner's own voice and feed the style anchor.
+  /// True when a human edited the draft before approving. The edit is
+  /// stored as a contact-scoped VoiceCorrection (draft vs. final text).
   humanEdited  Boolean       @default(false)
   errorMessage String?
 
@@ -534,6 +620,13 @@ enum DmMessageSource {
   AI
   /// Outbound sent by a comment-to-DM campaign.
   CAMPAIGN
+}
+
+enum VoiceCorrectionKind {
+  /// The owner edited a held draft before approving it.
+  EDIT
+  /// Added by hand in the Sprachprofil.
+  MANUAL
 }
 
 enum AiReplyStatus {

@@ -4,6 +4,13 @@
 
 import { completeSetterPrompt } from "./llm";
 import { fetchKnowledgeContext, fetchStyleExamples } from "./knowledge";
+import { fetchCorpusStyleExamples } from "./style-corpus";
+import {
+  findOffLanguageFillers,
+  isReplyLanguageCompatible,
+  type ChatLanguage,
+} from "./language";
+import { resolveLlmTarget, type LlmSelection } from "./providers/resolve";
 import {
   buildNudgeUserPrompt,
   buildSetterSystemPrompt,
@@ -47,11 +54,36 @@ export function extractDraftReply(raw: string): DraftReply {
   };
 }
 
+/**
+ * A draft in the wrong language is never auto-sent: force review and
+ * say why. Unchanged drafts are returned as-is.
+ */
+export function enforceDraftLanguage(
+  draft: DraftReply,
+  chatLanguage: ChatLanguage
+): DraftReply {
+  if (isReplyLanguageCompatible(draft.reply, chatLanguage)) return draft;
+  const reason =
+    findOffLanguageFillers(draft.reply, chatLanguage).length > 0
+      ? "off_language_filler"
+      : "off_language_draft";
+  return {
+    ...draft,
+    shouldSend: false,
+    needsReview: true,
+    reasons: [...new Set([...draft.reasons, reason])],
+  };
+}
+
 export interface GenerateDraftParams {
   incomingText: string;
   participantUsername?: string | null;
   history: SetterPromptContext["history"];
   humanStyleAnchor: string[];
+  /** Rendered contact-scoped corrections for this chat. */
+  voiceCorrections?: string[];
+  /** Resolved chat language; drives the prompt and the language guard. */
+  chatLanguage?: ChatLanguage;
   config: {
     persona?: string | null;
     goal?: string | null;
@@ -60,7 +92,30 @@ export interface GenerateDraftParams {
     knowledgeEnabled: boolean;
     styleExamplesEnabled: boolean;
     minConfidence: number;
+    /** Owner-edited voice rules (Sprachprofil). */
+    voiceRules?: string | null;
+    /** Pull examples from the local style corpus of this account. */
+    styleCorpusEnabled?: boolean;
+    instagramAccountId?: string;
+    /** UI-selected model provider; absent/empty uses the env provider. */
+    llmSelection?: LlmSelection;
   };
+}
+
+async function loadCorpusExamples(
+  config: GenerateDraftParams["config"],
+  incomingText: string,
+  language: ChatLanguage
+): Promise<string> {
+  if (!config.styleCorpusEnabled || !config.instagramAccountId) return "";
+  return fetchCorpusStyleExamples({
+    instagramAccountId: config.instagramAccountId,
+    incomingText,
+    language,
+  }).catch((error: unknown) => {
+    console.error("[ai-setter] style corpus lookup failed:", error);
+    return "";
+  });
 }
 
 /**
@@ -91,13 +146,21 @@ export async function generateSetterDraft(
     params.participantUsername
   );
 
-  const [knowledgeContext, styleExamples] = await Promise.all([
+  const chatLanguage = params.chatLanguage ?? "unknown";
+  // Resolve the provider first: a misconfigured selection fails the job
+  // before any retrieval work is spent.
+  const target = params.config.llmSelection
+    ? await resolveLlmTarget(params.config.llmSelection)
+    : null;
+
+  const [knowledgeContext, styleExamples, corpusExamples] = await Promise.all([
     params.config.knowledgeEnabled
       ? fetchKnowledgeContext(knowledgeQuery).catch(() => "")
       : Promise.resolve(""),
     params.config.styleExamplesEnabled
       ? fetchStyleExamples(params.incomingText).catch(() => "")
       : Promise.resolve(""),
+    loadCorpusExamples(params.config, params.incomingText, chatLanguage),
   ]);
 
   const context: SetterPromptContext = {
@@ -107,6 +170,9 @@ export async function generateSetterDraft(
     humanStyleAnchor: params.humanStyleAnchor,
     knowledgeContext,
     styleExamples,
+    corpusExamples,
+    voiceCorrections: params.voiceCorrections ?? [],
+    targetLanguage: chatLanguage,
     persona: params.config.persona,
     goal: params.config.goal,
     bookingLink: params.config.bookingLink,
@@ -116,8 +182,8 @@ export async function generateSetterDraft(
 
   const system = buildSetterSystemPrompt(params.config);
   const userPrompt = buildSetterUserPrompt(context);
-  const raw = await completeSetterPrompt(system, userPrompt);
-  return extractDraftReply(raw);
+  const raw = await completeSetterPrompt(system, userPrompt, target);
+  return enforceDraftLanguage(extractDraftReply(raw), chatLanguage);
 }
 
 /**
@@ -128,9 +194,15 @@ export async function generateWindowNudge(params: {
   participantUsername?: string | null;
   history: SetterPromptContext["history"];
   humanStyleAnchor: string[];
+  voiceCorrections?: string[];
+  chatLanguage?: ChatLanguage;
   quietHours: number;
   config: GenerateDraftParams["config"];
 }): Promise<DraftReply> {
+  const chatLanguage = params.chatLanguage ?? "unknown";
+  const target = params.config.llmSelection
+    ? await resolveLlmTarget(params.config.llmSelection)
+    : null;
   const knowledgeContext = params.config.knowledgeEnabled
     ? await fetchKnowledgeContext(
         buildKnowledgeQuery(params.history, null, params.participantUsername)
@@ -143,6 +215,8 @@ export async function generateWindowNudge(params: {
     humanStyleAnchor: params.humanStyleAnchor,
     knowledgeContext,
     styleExamples: "",
+    voiceCorrections: params.voiceCorrections ?? [],
+    targetLanguage: chatLanguage,
     persona: params.config.persona,
     goal: params.config.goal,
     bookingLink: params.config.bookingLink,
@@ -152,6 +226,6 @@ export async function generateWindowNudge(params: {
 
   const system = buildSetterSystemPrompt(params.config);
   const userPrompt = buildNudgeUserPrompt(context, params.quietHours);
-  const raw = await completeSetterPrompt(system, userPrompt);
-  return extractDraftReply(raw);
+  const raw = await completeSetterPrompt(system, userPrompt, target);
+  return enforceDraftLanguage(extractDraftReply(raw), chatLanguage);
 }

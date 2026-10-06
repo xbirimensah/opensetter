@@ -185,8 +185,9 @@ export async function sendAiReply(
     );
 
     const sentAt = new Date();
-    // A human-edited approval is the owner's own wording: mirror it as
-    // HUMAN so the style anchor learns from it on every future draft.
+    // A human-edited approval is mirrored as HUMAN for the thread view.
+    // Its text is still excluded from the style anchor and corpus (it
+    // started as an AI draft); the edit is learned as a correction below.
     const humanEdited =
       params.textOverride !== undefined && text !== replyLog.draftText.trim();
     await prisma.dmMessage
@@ -220,6 +221,25 @@ export async function sendAiReply(
         errorMessage: null,
       },
     });
+    if (humanEdited) {
+      // The edit is the owner correcting the setter's voice for this
+      // contact. It is stored as a contact-scoped contrast pair; the
+      // edited text itself never enters the style corpus or anchor.
+      await prisma.voiceCorrection
+        .create({
+          data: {
+            instagramAccountId: account.id,
+            conversationId: replyLog.conversationId,
+            replyLogId: replyLog.id,
+            kind: "EDIT",
+            avoidText: replyLog.draftText,
+            preferText: text,
+          },
+        })
+        .catch((error: unknown) => {
+          console.error("[ai-setter] could not record voice correction:", error);
+        });
+    }
     if (!isNudge) {
       await scheduleWindowNudge(
         replyLog.conversation,

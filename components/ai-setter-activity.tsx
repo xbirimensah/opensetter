@@ -117,7 +117,7 @@ function DraftCard({ reply, onResolved }: DraftCardProps) {
         </span>
       </div>
 
-      <p className="mt-2 rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted">
+      <p className="mt-2 break-words rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted">
         {reply.inboundText}
       </p>
 
@@ -125,7 +125,7 @@ function DraftCard({ reply, onResolved }: DraftCardProps) {
         value={text}
         onChange={(event) => setText(event.target.value)}
         rows={2}
-        className="mt-2 w-full resize-y rounded-lg border border-border bg-surface-hover px-3 py-2 text-sm text-foreground focus:border-accent/40 focus:outline-none"
+        className="mt-2 w-full resize-y rounded-lg border border-border bg-surface-hover px-3 py-2 text-base text-foreground focus:border-accent/40 focus:outline-none sm:text-sm"
       />
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -135,7 +135,7 @@ function DraftCard({ reply, onResolved }: DraftCardProps) {
             type="button"
             onClick={() => void act("dismiss")}
             disabled={busy !== null}
-            className="rounded-lg px-3 py-1.5 text-sm text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
+            className="min-h-11 rounded-lg px-4 py-1.5 text-sm text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-50 sm:min-h-0 sm:px-3"
           >
             Dismiss
           </button>
@@ -143,7 +143,7 @@ function DraftCard({ reply, onResolved }: DraftCardProps) {
             type="button"
             onClick={() => void act("approve")}
             disabled={busy !== null || !text.trim()}
-            className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-0 sm:px-3"
           >
             {busy === "approve" ? "Sending…" : "Approve & send"}
           </button>

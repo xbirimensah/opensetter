@@ -46,14 +46,14 @@ export default function KeywordInput({ keywords, onChange, max = 10 }: KeywordIn
         {keywords.map((keyword) => (
           <span
             key={keyword}
-            className="inline-flex items-center gap-2 px-2 py-1 rounded border border-border text-xs"
+            className="inline-flex max-w-full items-center gap-2 px-2 py-1 rounded border border-border text-xs"
           >
-            {keyword}
+            <span className="min-w-0 break-all">{keyword}</span>
             <button
               type="button"
               onClick={() => removeKeyword(keyword)}
               aria-label={`Remove ${keyword}`}
-              className="text-muted hover:text-error"
+              className="-my-1 inline-flex min-h-11 shrink-0 items-center text-muted hover:text-error sm:my-0 sm:min-h-0"
             >
               Remove
             </button>
@@ -65,7 +65,7 @@ export default function KeywordInput({ keywords, onChange, max = 10 }: KeywordIn
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={keywords.length === 0 ? "Type keyword and press Enter..." : ""}
-          className="flex-1 min-w-[120px] bg-transparent text-sm text-foreground placeholder:text-faint outline-none"
+          className="flex-1 min-w-[120px] min-h-11 bg-transparent text-base text-foreground placeholder:text-faint outline-none sm:min-h-0 sm:text-sm"
         />
       </div>
       <p className="text-xs text-muted">

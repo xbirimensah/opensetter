@@ -12,6 +12,8 @@
 import { useEffect, useState } from "react";
 import { readCache, writeCache } from "@/lib/client-cache";
 
+const PAGE_SIZE = 60;
+
 interface InstagramPost {
   id: string;
   caption?: string;
@@ -47,6 +49,10 @@ export default function PostPicker({
   const [query, setQuery] = useState("");
   // The post currently hovered — its video (if it's a reel) plays a preview.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  // The grid loads the whole library (all=true). On accounts with hundreds of
+  // posts, rendering every tile at once is enough to make mobile Safari drop
+  // the page, so they are revealed in batches.
+  const [shown, setShown] = useState(PAGE_SIZE);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,20 +125,27 @@ export default function PostPicker({
     );
   }
 
-  const visible = query.trim()
+  const matching = query.trim()
     ? posts.filter((p) =>
         (p.caption ?? "").toLowerCase().includes(query.trim().toLowerCase())
       )
     : posts;
+
+  const visible = matching.slice(0, shown);
+  const remaining = matching.length - visible.length;
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            // A new search starts from the first batch again.
+            setShown(PAGE_SIZE);
+          }}
           placeholder="Search your posts by caption…"
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+          className="w-full min-w-0 rounded-lg border border-border bg-surface px-3 py-2.5 text-base text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none sm:py-2 sm:text-sm"
         />
         <span className="shrink-0 text-xs text-muted">{posts.length}</span>
       </div>
@@ -148,7 +161,10 @@ export default function PostPicker({
               Already used by another campaign
             </p>
           )}
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-y-auto p-1">
+          {/* auto-rows-min + content-start keep each row at its natural height.
+              Without them the rows share out max-h-64 instead of scrolling, and
+              the square thumbnails flatten into strips. */}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 auto-rows-min content-start overflow-y-auto p-1">
             {visible.map((post) => {
               const isSelected = selectedPostId === post.id;
               const usedByName = usedPostIds?.[post.id];
@@ -183,6 +199,8 @@ export default function PostPicker({
               <img
                 src={thumb}
                 alt={post.caption?.slice(0, 50) ?? "Instagram post"}
+                loading="lazy"
+                decoding="async"
                 className={`w-full h-full object-cover ${isUsed ? "opacity-60" : ""}`}
               />
             ) : (
@@ -218,6 +236,15 @@ export default function PostPicker({
               );
             })}
           </div>
+          {remaining > 0 && (
+            <button
+              type="button"
+              onClick={() => setShown((n) => n + PAGE_SIZE)}
+              className="min-h-11 w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground sm:min-h-0"
+            >
+              Show {Math.min(PAGE_SIZE, remaining)} more
+            </button>
+          )}
         </>
       )}
     </div>

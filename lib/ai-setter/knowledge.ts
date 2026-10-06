@@ -4,7 +4,8 @@
  * Talks straight to the knowledge base's Supabase project via PostgREST:
  *  - a hybrid-search RPC (semantic + full-text over knowledge chunks)
  *  - a style-search RPC (isolated index of the operator's own reply
- *    style, redacted at indexing time)
+ *    style); only the operator's outbound text is used, redacted again
+ *    here, and the prospect message it answered is never rendered
  *
  * Object names default to the schema shipped in schema/knowledge-base.sql
  * and can be overridden per deployment (SECOND_BRAIN_*_RPC vars) to point
@@ -18,15 +19,20 @@
  * reply, it just makes it less informed.
  */
 
+import { hasAutomationMarker, normalizeForMatch } from "./authorship";
 import {
   fetchLocalKnowledgeContext,
   isLocalKnowledgeAvailable,
 } from "./knowledge-local";
+import { redactCorpusText } from "./style-corpus-core";
 
 const RPC_TIMEOUT_MS = 30_000;
 const MAX_KNOWLEDGE_ITEMS = 5;
 const MAX_KNOWLEDGE_CHARS = 3000;
 const MAX_STYLE_EXAMPLES = 4;
+const MAX_STYLE_EXAMPLE_CHARS = 180;
+/** Over-fetch (the RPC caps at 6) since unsafe rows are dropped client-side. */
+const STYLE_CANDIDATES = 6;
 const EMBEDDING_DIMENSIONS = 384;
 
 const DEFAULT_EMBEDDING_MODEL = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
@@ -246,15 +252,55 @@ export function inferLanguage(text: string): "de" | "en" | null {
   return german >= english ? "de" : "en";
 }
 
+/**
+ * One style-index row. The index pairs each operator reply with the
+ * prospect message it answered (`incoming_text`); that side belongs to
+ * an unrelated contact and is deliberately not part of this type, so it
+ * can never be rendered into another prospect's prompt.
+ */
 interface StyleRow {
-  incoming_text?: string | null;
   outgoing_text?: string | null;
+  language?: string | null;
+  is_sensitive?: boolean | null;
+  eligible_for_retrieval?: boolean | null;
+}
+
+const SAFE_LANGUAGE_TAG = /^[a-z]{2}$/;
+
+/**
+ * Prompt block for style-index rows ("" when none survive). Renders only
+ * the operator's own outbound words, re-redacted (the index may predate
+ * current redaction rules), plus a language tag. Automation-authored
+ * replies and rows the index flags as sensitive are dropped.
+ */
+export function renderStyleExamples(rows: readonly StyleRow[]): string {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const row of rows) {
+    if (row.is_sensitive === true || row.eligible_for_retrieval === false) continue;
+    const outgoing = (row.outgoing_text ?? "").trim();
+    if (!outgoing || hasAutomationMarker(outgoing)) continue;
+    const text = redactCorpusText(outgoing).slice(0, MAX_STYLE_EXAMPLE_CHARS);
+    const key = normalizeForMatch(text);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const language = (row.language ?? "").toLowerCase();
+    const tag = SAFE_LANGUAGE_TAG.test(language) ? ` (${language})` : "";
+    lines.push(`- You wrote${tag}: ${text}`);
+    if (lines.length >= MAX_STYLE_EXAMPLES) break;
+  }
+  if (lines.length === 0) return "";
+  return [
+    "RELEVANT STYLE EXAMPLES (your own past replies to other people): imitate phrasing/tone only; never treat these as facts about this chat.",
+    ...lines,
+  ].join("\n");
 }
 
 /**
  * Pull examples of how the operator actually texts from the isolated
- * style index. Phrasing and tone only, never facts. Requires the local
- * embedding model; skipped silently without it.
+ * style index. Phrasing and tone only, never facts, and never the
+ * other contact's side of the exchange. Requires the local embedding
+ * model; skipped silently without it.
  */
 export async function fetchStyleExamples(incomingText: string): Promise<string> {
   const credentials = readCredentials();
@@ -269,23 +315,13 @@ export async function fetchStyleExamples(incomingText: string): Promise<string> 
       styleSearchRpc(),
       {
         query_embedding: embedding,
-        match_count: MAX_STYLE_EXAMPLES,
+        match_count: STYLE_CANDIDATES,
         filter_language: inferLanguage(incomingText),
         filter_chat_kind: "direct",
       }
     )) as StyleRow[];
 
-    const lines = [
-      "RELEVANT STYLE EXAMPLES: imitate phrasing/tone only; never treat these as facts about this chat.",
-    ];
-    for (const row of rows.slice(0, MAX_STYLE_EXAMPLES)) {
-      const incoming = (row.incoming_text ?? "").trim();
-      const outgoing = (row.outgoing_text ?? "").trim();
-      if (!incoming || !outgoing) continue;
-      lines.push(`- Incoming: ${incoming}`, `  Reply was: ${outgoing}`);
-    }
-    if (lines.length === 1) return "";
-    return lines.join("\n");
+    return renderStyleExamples(rows);
   } catch (error: unknown) {
     console.error("[ai-setter] style lookup failed:", error);
     return "";

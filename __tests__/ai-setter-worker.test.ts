@@ -25,12 +25,16 @@ const mocks = vi.hoisted(() => ({
   generateWindowNudge: vi.fn(),
   sendAiReply: vi.fn(),
   scheduleWindowNudge: vi.fn().mockResolvedValue(undefined),
+  loadVoiceContext: vi.fn(),
 }));
 
 vi.mock("@/lib/db/client", () => ({ prisma: mocks.prisma }));
 vi.mock("@/lib/ai-setter/generate", () => ({
   generateSetterDraft: mocks.generateSetterDraft,
   generateWindowNudge: mocks.generateWindowNudge,
+}));
+vi.mock("@/lib/ai-setter/voice-context", () => ({
+  loadVoiceContext: mocks.loadVoiceContext,
 }));
 vi.mock("@/lib/ai-setter/send", () => ({
   sendAiReply: mocks.sendAiReply,
@@ -126,6 +130,12 @@ beforeEach(() => {
     reasons: [],
   });
   mocks.sendAiReply.mockResolvedValue({ ok: true });
+  mocks.loadVoiceContext.mockResolvedValue({
+    humanStyleAnchor: ["ja easy, was machst du so"],
+    recentAiReplies: [],
+    voiceCorrections: [],
+    corpusEntryCount: 25,
+  });
 });
 
 describe("processInboundDm", () => {
@@ -363,6 +373,93 @@ function nudgeConversation(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe("voice guards in the worker", () => {
+  it("should pass chat language, corrections and voice rules into the draft", async () => {
+    mocks.prisma.instagramAccount.findUnique.mockResolvedValue({
+      ...BASE_ACCOUNT,
+      aiSetterConfig: { ...BASE_CONFIG, voiceRules: "klein schreiben", llmProvider: "openai", llmModel: "gpt-5-codex" },
+    });
+    mocks.loadVoiceContext.mockResolvedValue({
+      humanStyleAnchor: ["ja easy"],
+      recentAiReplies: [],
+      voiceCorrections: ["Avoid: Hallo!\nPrefer: yo"],
+      corpusEntryCount: 3,
+    });
+
+    await processInboundDm(makeJob());
+
+    expect(mocks.generateSetterDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        humanStyleAnchor: ["ja easy"],
+        voiceCorrections: ["Avoid: Hallo!\nPrefer: yo"],
+        chatLanguage: "de",
+        config: expect.objectContaining({
+          voiceRules: "klein schreiben",
+          instagramAccountId: "acc_1",
+          llmSelection: { workspaceId: "ws_1", provider: "openai", model: "gpt-5-codex" },
+        }),
+      })
+    );
+  });
+
+  it("should hold a confident draft that commits to a meeting time", async () => {
+    mocks.generateSetterDraft.mockResolvedValue({
+      reply: "passt, dann morgen um 15 uhr",
+      confidence: 0.95,
+      shouldSend: true,
+      needsReview: false,
+      reasons: [],
+    });
+
+    await processInboundDm(makeJob());
+
+    expect(mocks.sendAiReply).not.toHaveBeenCalled();
+    expect(mocks.prisma.aiReplyLog.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "HELD",
+          reasons: expect.arrayContaining([
+            "draft makes an availability or meeting commitment",
+          ]),
+        }),
+      })
+    );
+  });
+
+  it("should hold a draft that repeats a recent AI reply", async () => {
+    mocks.loadVoiceContext.mockResolvedValue({
+      humanStyleAnchor: ["ja easy"],
+      recentAiReplies: ["klar, was machst du aktuell?"],
+      voiceCorrections: [],
+      corpusEntryCount: 3,
+    });
+
+    await processInboundDm(makeJob());
+
+    expect(mocks.sendAiReply).not.toHaveBeenCalled();
+  });
+
+  it("should hold when there is no human voice evidence anywhere", async () => {
+    mocks.loadVoiceContext.mockResolvedValue({
+      humanStyleAnchor: [],
+      recentAiReplies: [],
+      voiceCorrections: [],
+      corpusEntryCount: 0,
+    });
+
+    await processInboundDm(makeJob());
+
+    expect(mocks.sendAiReply).not.toHaveBeenCalled();
+    expect(mocks.prisma.aiReplyLog.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reasons: expect.arrayContaining(["no human-written voice evidence yet"]),
+        }),
+      })
+    );
+  });
+});
 
 describe("processWindowNudge", () => {
   beforeEach(() => {

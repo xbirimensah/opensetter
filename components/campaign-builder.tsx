@@ -12,7 +12,7 @@
  * follow / email / follow-up steps arrive in later turns.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import PostPicker from "@/components/post-picker";
@@ -23,6 +23,11 @@ import {
   IMPORT_ACCOUNT_KEY,
   type ImportRow,
 } from "@/lib/import-queue";
+
+// Shared text field style. text-base on mobile keeps iOS from zooming into the
+// field on focus; sm: restores the compact desktop size.
+const FIELD_CLASS =
+  "w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-base text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none sm:py-2 sm:text-sm";
 
 type TriggerScope = "specific" | "any" | "next";
 type MatchMode = "specific" | "any";
@@ -88,7 +93,7 @@ function Radio({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+      className={`flex min-h-11 w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors sm:min-h-0 ${
         checked ? "border-accent bg-accent/5" : "border-border hover:border-border-hover"
       }`}
     >
@@ -111,11 +116,14 @@ function Toggle({
   on: boolean;
   onToggle: () => void;
 }) {
+  // The before: pseudo-element pads the hit area to ~44px on touch screens
+  // without changing how the switch looks.
   return (
     <button
       type="button"
       onClick={onToggle}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+      aria-pressed={on}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors before:absolute before:-inset-y-2.5 before:-inset-x-1 sm:before:hidden ${
         on ? "bg-accent" : "bg-border-hover"
       }`}
     >
@@ -180,6 +188,12 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   const [followUpMessage, setFollowUpMessage] = useState("");
 
   const [previewTab, setPreviewTab] = useState<PreviewTab>("dm");
+  // Below lg the preview stacks under a long form, so it starts collapsed.
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  // The dashboard scrolls inside <main>, not the window, so jumping back to
+  // the top (next import row, save errors) goes through this element.
+  const topRef = useRef<HTMLDivElement>(null);
 
   // CSV import queue. When present, each save advances to the next row instead
   // of returning to the campaigns list.
@@ -463,7 +477,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           setImportQueue(remaining);
           prefillFromRow(remaining[0]);
           setSaving(false);
-          if (typeof window !== "undefined") window.scrollTo({ top: 0 });
+          topRef.current?.scrollIntoView({ block: "start" });
           return;
         }
         if (importQueue) {
@@ -490,8 +504,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             ? `${firstField}: ${fieldErrors[firstField][0]}`
             : data.error ?? "Failed to save campaign"
         );
-        if (typeof window !== "undefined")
-          window.scrollTo({ top: 0, behavior: "smooth" });
+        topRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
       }
     } catch {
       setError("Failed to save campaign");
@@ -514,7 +527,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       }
       setImportQueue(remaining);
       prefillFromRow(remaining[0]);
-      if (typeof window !== "undefined") window.scrollTo({ top: 0 });
+      topRef.current?.scrollIntoView({ block: "start" });
       return;
     }
     // Last row skipped — finish the import.
@@ -538,7 +551,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         <p className="text-sm text-muted">Campaign not found.</p>
         <button
           onClick={() => router.push("/campaigns")}
-          className="mt-4 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
+          className="mt-4 min-h-11 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground sm:min-h-0"
         >
           Back to campaigns
         </button>
@@ -547,7 +560,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   }
 
   return (
-    <div className="space-y-6">
+    <div ref={topRef} className="space-y-6">
       {importQueue && (
         <div className="rounded border border-accent/30 bg-accent/5 px-4 py-3 text-sm">
           <span className="font-medium text-foreground">
@@ -560,16 +573,18 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         </div>
       )}
 
-      {/* Top bar */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
+      {/* Top bar. Sticky below lg so Save stays reachable from deep in the
+          form; it pins to the top of the scroll area, clear of the mobile
+          bottom nav and the home indicator. */}
+      <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-border bg-background py-3 sm:gap-4 lg:static lg:z-auto lg:border-0 lg:bg-transparent lg:py-0">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           {mode === "edit" ? (
             <>
               <span className="truncate text-sm font-semibold text-foreground">
                 {name || "Untitled campaign"}
               </span>
               <span
-                className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${
                   isActive ? "bg-success/15 text-success" : "bg-muted/15 text-muted"
                 }`}
               >
@@ -577,16 +592,16 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
               </span>
             </>
           ) : (
-            <span className="text-sm text-muted">New campaign</span>
+            <span className="truncate text-sm text-muted">New campaign</span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {importQueue && (
             <button
               type="button"
               onClick={skipRow}
               disabled={saving}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
+              className="min-h-11 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50 sm:min-h-0 sm:px-4"
             >
               {importQueue.length > 1 ? "Skip" : "Skip & finish"}
             </button>
@@ -597,7 +612,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 type="button"
                 onClick={() => handleSubmit(false)}
                 disabled={saving}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
+                className="min-h-11 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50 sm:min-h-0 sm:px-4"
               >
                 Stop
               </button>
@@ -606,7 +621,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 type="button"
                 onClick={() => handleSubmit(true)}
                 disabled={saving}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
+                className="min-h-11 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50 sm:min-h-0 sm:px-4"
               >
                 Go Live
               </button>
@@ -615,7 +630,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             type="button"
             onClick={() => handleSubmit(mode === "new" ? true : isActive)}
             disabled={saving}
-            className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-0 sm:px-5"
           >
             {saving ? "Saving…" : mode === "new" ? "Go Live" : "Save changes"}
           </button>
@@ -624,7 +639,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
 
       <div className="grid gap-8 lg:grid-cols-[300px_1fr]">
       {/* Left: controls */}
-      <div className="space-y-8">
+      <div className="min-w-0 space-y-8">
         {error && (
           <div className="rounded border border-error/20 bg-error/10 p-3 text-sm text-error">
             {error}
@@ -640,7 +655,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. YC referral"
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+            className={FIELD_CLASS}
             maxLength={100}
           />
           {accounts.length > 1 && (
@@ -705,7 +720,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 value={keywordText}
                 onChange={(e) => setKeywordText(e.target.value)}
                 placeholder="Enter a word or multiple"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+                className={FIELD_CLASS}
               />
               <p className="text-xs text-muted">Use commas to separate words</p>
             </div>
@@ -717,7 +732,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             any word
           </Radio>
           <div className="rounded-lg border border-border px-3 py-2.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-sm text-foreground">
                 AI-personalize the DM per commenter
               </span>
@@ -732,7 +747,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
               failure falls back to your static text.
             </p>
           </div>
-          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
             <span className="text-sm text-foreground">
               reply to their comments under the post
             </span>
@@ -754,7 +769,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                     }
                     placeholder="Sent you a DM! 📩"
                     maxLength={1000}
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+                    className={FIELD_CLASS}
                   />
                   {publicReplyMessages.length > 1 && (
                     <button
@@ -764,7 +779,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                           prev.filter((_, idx) => idx !== i)
                         )
                       }
-                      className="shrink-0 px-2 text-muted hover:text-error"
+                      className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center px-2 text-muted hover:text-error sm:min-h-0 sm:min-w-0"
                       aria-label="Remove reply"
                     >
                       ✕
@@ -778,7 +793,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onClick={() =>
                     setPublicReplyMessages((prev) => [...prev, ""])
                   }
-                  className="text-xs font-medium text-accent hover:underline"
+                  className="inline-flex min-h-11 items-center text-xs font-medium text-accent hover:underline sm:min-h-0"
                 >
                   + Add another reply
                 </button>
@@ -793,7 +808,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
 
         <Section title="They will get">
           <div className="rounded-lg border border-border p-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-sm text-foreground">an opening DM</span>
               <Toggle
                 on={openingDmEnabled}
@@ -807,21 +822,21 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onChange={(e) => setOpeningDmMessage(e.target.value)}
                   placeholder="Hey there! I'm so happy you're here 😊"
                   rows={3}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none resize-none"
+                  className={`${FIELD_CLASS} resize-none`}
                   maxLength={1000}
                 />
                 <input
                   value={openingDmButtonLabel}
                   onChange={(e) => setOpeningDmButtonLabel(e.target.value)}
                   placeholder="Send me the link"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+                  className={FIELD_CLASS}
                   maxLength={64}
                 />
               </div>
             )}
           </div>
           <div className="mt-3 rounded-lg border border-border p-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-sm text-foreground">
                 a follow requirement first
               </span>
@@ -837,14 +852,14 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onChange={(e) => setFollowPromptMessage(e.target.value)}
                   placeholder="quick favor before i send your link. i don't make any money from this, it's free. if you want to support me, just don't unfollow after, and star the repo on github if it helps you. tap the button once you're following and i'll send it over"
                   rows={3}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none resize-none"
+                  className={`${FIELD_CLASS} resize-none`}
                   maxLength={1000}
                 />
                 <input
                   value={followPromptButtonLabel}
                   onChange={(e) => setFollowPromptButtonLabel(e.target.value)}
                   placeholder="i'm following"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+                  className={FIELD_CLASS}
                   maxLength={20}
                 />
                 <p className="text-xs text-muted">
@@ -865,7 +880,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
               onChange={(e) => setDmMessage(e.target.value)}
               placeholder="Write a message"
               rows={3}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none resize-none"
+              className={`${FIELD_CLASS} resize-none`}
               maxLength={1000}
             />
             {linkOpen ? (
@@ -874,37 +889,43 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   value={trackedDestinationUrl}
                   onChange={(e) => setTrackedDestinationUrl(e.target.value)}
                   onBlur={ensureLinkToken}
+                  inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   placeholder="https://yourlink.com/offer"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+                  className={FIELD_CLASS}
                 />
                 <input
                   value={linkButtonLabel}
                   onChange={(e) => setLinkButtonLabel(e.target.value)}
                   placeholder="Button label (e.g. Open link)"
                   maxLength={20}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+                  className={FIELD_CLASS}
                 />
                 {secondLinkOpen ? (
                   <div className="space-y-2 border-t border-border pt-2">
                     <input
                       value={secondaryDestinationUrl}
                       onChange={(e) => setSecondaryDestinationUrl(e.target.value)}
+                      inputMode="url"
+                      autoCapitalize="none"
+                      autoCorrect="off"
                       placeholder="https://yourlink.com/second"
-                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+                      className={FIELD_CLASS}
                     />
                     <input
                       value={secondaryButtonLabel}
                       onChange={(e) => setSecondaryButtonLabel(e.target.value)}
                       placeholder="Second button label"
                       maxLength={20}
-                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+                      className={FIELD_CLASS}
                     />
                   </div>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setSecondLinkOpen(true)}
-                    className="w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground"
+                    className="min-h-11 w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground sm:min-h-0"
                   >
                     + Add A Second Link
                   </button>
@@ -914,7 +935,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
               <button
                 type="button"
                 onClick={() => setLinkOpen(true)}
-                className="w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground"
+                className="min-h-11 w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground sm:min-h-0"
               >
                 + Add A Link
               </button>
@@ -924,7 +945,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             </p>
           </div>
           <div className="mt-3 rounded-lg border border-border p-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-sm text-foreground">
                 a follow-up thank-you message
               </span>
@@ -940,7 +961,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   onChange={(e) => setFollowUpMessage(e.target.value)}
                   placeholder="Btw just wanted to say thanks for following me, I appreciate the support 🙌"
                   rows={3}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none resize-none"
+                  className={`${FIELD_CLASS} resize-none`}
                   maxLength={1000}
                 />
                 <p className="text-xs text-muted">
@@ -953,10 +974,24 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         </Section>
       </div>
 
-      {/* Right: preview */}
-      <div>
-        <p className="mb-4 text-sm text-muted">Preview</p>
-        <div className="flex justify-center lg:sticky lg:top-6 lg:block">
+      {/* Right: preview. Collapsible below lg, always open from lg up. */}
+      <div className="min-w-0">
+        <p className="mb-4 hidden text-sm text-muted lg:block">Preview</p>
+        <button
+          type="button"
+          onClick={() => setPreviewOpen((open) => !open)}
+          aria-expanded={previewOpen}
+          aria-controls="campaign-preview"
+          className="mb-4 min-h-11 w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground lg:hidden"
+        >
+          {previewOpen ? "Hide preview" : "Show preview"}
+        </button>
+        <div
+          id="campaign-preview"
+          className={`justify-center lg:sticky lg:top-6 lg:block ${
+            previewOpen ? "flex" : "hidden"
+          }`}
+        >
           <CampaignPreview
             tab={previewTab}
             onTabChange={setPreviewTab}

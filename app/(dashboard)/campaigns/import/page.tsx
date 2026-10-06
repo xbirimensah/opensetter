@@ -86,7 +86,7 @@ export default function ImportCampaignsPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-lg font-semibold">Import campaigns</h1>
-        <p className="text-sm text-muted mt-1">
+        <p className="text-sm text-muted mt-1 break-words">
           Paste a CSV with one row per campaign. Each row opens in the builder
           prefilled and editable, so you can review it and pick the reel before
           saving. Required columns are{" "}
@@ -131,27 +131,27 @@ export default function ImportCampaignsPage() {
           onChange={(e) => setCsv(e.target.value)}
           placeholder={SAMPLE}
           rows={10}
-          className="w-full px-4 py-3 rounded bg-surface border border-border text-sm font-mono text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none resize-y"
+          className="w-full px-4 py-3 rounded bg-surface border border-border text-base font-mono text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none resize-y sm:text-sm"
         />
         <button
           type="button"
           onClick={() => setCsv(SAMPLE)}
-          className="text-xs text-muted hover:text-foreground"
+          className="inline-flex min-h-11 items-center text-xs text-muted hover:text-foreground sm:min-h-0"
         >
           Fill with a sample
         </button>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
         <button
           onClick={startImport}
-          className="px-5 py-2 rounded bg-accent text-sm font-medium text-white hover:bg-accent-hover"
+          className="min-h-11 flex-1 px-5 py-2 rounded bg-accent text-sm font-medium text-white hover:bg-accent-hover sm:min-h-0 sm:flex-none"
         >
           Review and import
         </button>
         <button
           onClick={() => router.push("/campaigns")}
-          className="px-5 py-2 rounded text-sm text-muted hover:text-foreground border border-border"
+          className="min-h-11 flex-1 px-5 py-2 rounded text-sm text-muted hover:text-foreground border border-border sm:min-h-0 sm:flex-none"
         >
           Cancel
         </button>

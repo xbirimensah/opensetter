@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     },
     dmMessage: { create: vi.fn() },
     dmConversation: { update: vi.fn() },
+    voiceCorrection: { create: vi.fn() },
   },
   sendDirectMessage: vi.fn(),
   reserveDMSlot: vi.fn(),
@@ -86,6 +87,7 @@ beforeEach(() => {
   mocks.prisma.aiReplyLog.update.mockResolvedValue({});
   mocks.prisma.dmMessage.create.mockResolvedValue({});
   mocks.prisma.dmConversation.update.mockResolvedValue({});
+  mocks.prisma.voiceCorrection.create.mockResolvedValue({});
   mocks.reserveWorkspaceDMSend.mockResolvedValue({
     allowed: true,
     periodStart: new Date(),
@@ -173,6 +175,27 @@ describe("sendAiReply double-send protection", () => {
         data: expect.objectContaining({ status: "SENT", humanEdited: true }),
       })
     );
+  });
+
+  it("should turn an edited approval into a contact-scoped voice correction", async () => {
+    await sendAiReply({ replyLogId: "log_1", textOverride: "my own wording" });
+
+    expect(mocks.prisma.voiceCorrection.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        instagramAccountId: "acc_1",
+        conversationId: "conv_1",
+        replyLogId: "log_1",
+        kind: "EDIT",
+        avoidText: "original draft",
+        preferText: "my own wording",
+      }),
+    });
+  });
+
+  it("should not record a correction for an unedited approval", async () => {
+    await sendAiReply({ replyLogId: "log_1" });
+
+    expect(mocks.prisma.voiceCorrection.create).not.toHaveBeenCalled();
   });
 
   it("should record unedited approvals as AI voice", async () => {

@@ -21,6 +21,9 @@ export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme | null>(null);
 
   useEffect(() => {
+    // Mount-time read of the DOM attribute set by the pre-paint script;
+    // it cannot be read during render without a hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(readTheme());
   }, []);
 
@@ -47,7 +50,7 @@ export default function ThemeToggle() {
         theme === "light" ? "Switch to dark mode" : "Switch to light mode"
       }
       title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-      className="rounded border border-border px-2 py-1 text-sm text-muted hover:border-border-hover hover:text-foreground"
+      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded border border-border px-2 py-1 text-sm text-muted hover:border-border-hover hover:text-foreground lg:min-h-0 lg:min-w-0"
     >
       {theme === null ? "…" : theme === "light" ? "Dark" : "Light"}
     </button>

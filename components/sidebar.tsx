@@ -38,6 +38,7 @@ export default function Sidebar({
       {/* Mobile overlay */}
       {isOpen && (
         <div
+          aria-hidden="true"
           className="fixed inset-0 z-40 bg-black/60 lg:hidden"
           onClick={onClose}
         />
@@ -45,15 +46,24 @@ export default function Sidebar({
 
       <aside
         className={`
-          fixed top-0 left-0 z-50 h-full w-64 bg-surface border-r border-border flex flex-col
-          lg:translate-x-0 lg:static lg:z-auto
+          fixed top-0 left-0 z-50 h-full w-72 max-w-[85vw] bg-surface border-r border-border flex flex-col
+          pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
+          lg:w-64 lg:max-w-none lg:translate-x-0 lg:static lg:z-auto lg:pt-0 lg:pb-0
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
-        <div className="px-6 py-5 border-b border-border">
-          <Link href="/dashboard" className="text-base font-semibold">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-border">
+          <Link href="/dashboard" onClick={onClose} className="text-base font-semibold">
             OpenSetter
           </Link>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close menu"
+            className="-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center rounded text-sm text-muted hover:text-foreground lg:hidden"
+          >
+            Close
+          </button>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
@@ -67,7 +77,7 @@ export default function Sidebar({
                 onClick={onClose}
                 aria-current={isActive ? "page" : undefined}
                 className={`
-                  block px-3 py-2 rounded text-sm
+                  flex min-h-11 items-center px-3 py-2 rounded text-sm lg:min-h-0
                   ${
                     isActive
                       ? "bg-surface-hover text-foreground font-medium"

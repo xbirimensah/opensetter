@@ -427,6 +427,11 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         commenterName,
         persona: setterConfig?.persona,
         goal: automation.goal ?? setterConfig?.goal,
+        llmSelection: {
+          workspaceId: automation.workspaceId,
+          provider: setterConfig?.llmProvider ?? null,
+          model: setterConfig?.llmModel ?? null,
+        },
       });
     }
 

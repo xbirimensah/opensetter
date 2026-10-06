@@ -128,7 +128,7 @@ export default function CampaignDetailPage() {
         <p className="text-sm text-muted">Campaign not found.</p>
         <button
           onClick={() => router.push("/campaigns")}
-          className="mt-4 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
+          className="mt-4 min-h-11 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground sm:min-h-0"
         >
           Back to campaigns
         </button>
@@ -164,17 +164,17 @@ export default function CampaignDetailPage() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,340px)_1fr]">
       {/* Left: config summary */}
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-6">
         <div className="flex items-center gap-2">
           <Link
             href="/campaigns"
-            className="text-sm text-muted hover:text-foreground"
+            className="inline-flex min-h-11 items-center text-sm text-muted hover:text-foreground sm:min-h-0"
           >
             &larr; Campaigns
           </Link>
         </div>
         <div className="flex items-center gap-2">
-          <h1 className="truncate text-lg font-semibold">{campaign.name}</h1>
+          <h1 className="min-w-0 truncate text-lg font-semibold">{campaign.name}</h1>
           <span
             className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${
               campaign.isActive
@@ -193,14 +193,14 @@ export default function CampaignDetailPage() {
               <img
                 src={postThumb}
                 alt="Post"
-                className="h-14 w-14 rounded object-cover"
+                className="h-14 w-14 shrink-0 rounded object-cover"
               />
             ) : (
-              <div className="grid h-14 w-14 place-items-center rounded bg-surface-hover text-[10px] text-muted">
+              <div className="grid h-14 w-14 shrink-0 place-items-center rounded bg-surface-hover text-[10px] text-muted">
                 {campaign.matchAnyPost || campaign.pendingNextReel ? "Any" : "Post"}
               </div>
             )}
-            <span className="text-sm text-foreground">{trigger}</span>
+            <span className="min-w-0 text-sm text-foreground">{trigger}</span>
           </div>
         </Summary>
 
@@ -249,7 +249,7 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* Right: top bar + tabs */}
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3 border-b border-border pb-3">
           <div className="flex gap-4">
             <TabButton active={tab === "insights"} onClick={() => setTab("insights")}>
@@ -262,14 +262,14 @@ export default function CampaignDetailPage() {
           <div className="flex items-center gap-2">
             <Link
               href={`/campaigns/${campaign.id}/edit`}
-              className="rounded border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground"
+              className="inline-flex min-h-11 items-center rounded border border-border px-4 py-1.5 text-sm text-muted hover:text-foreground sm:min-h-0 sm:px-3"
             >
               Edit
             </Link>
             <button
               onClick={toggleActive}
               disabled={busy}
-              className={`rounded border px-3 py-1.5 text-sm disabled:opacity-50 ${
+              className={`min-h-11 rounded border px-4 py-1.5 text-sm disabled:opacity-50 sm:min-h-0 sm:px-3 ${
                 campaign.isActive
                   ? "border-error/30 text-error hover:bg-error/10"
                   : "border-success/30 text-success hover:bg-success/10"
@@ -341,7 +341,7 @@ function Summary({ title, children }: { title: string; children: React.ReactNode
 
 function FieldBox({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded border border-border bg-surface px-3 py-2 text-sm text-foreground">
+    <div className="break-words rounded border border-border bg-surface px-3 py-2 text-sm text-foreground">
       {children}
     </div>
   );
@@ -359,7 +359,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`border-b-2 pb-2 text-sm font-medium ${
+      className={`min-h-11 border-b-2 pb-2 text-sm font-medium sm:min-h-0 ${
         active
           ? "border-accent text-foreground"
           : "border-transparent text-muted hover:text-foreground"

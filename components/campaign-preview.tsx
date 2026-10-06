@@ -139,7 +139,7 @@ function StatusBar() {
 function Phone({ children }: { children: React.ReactNode }) {
   const btn = "absolute w-[3px] rounded-sm bg-gradient-to-r from-zinc-500 to-zinc-700";
   return (
-    <div className="relative w-[300px]">
+    <div className="relative w-[300px] max-w-full">
       {/* Left side buttons: action, volume up, volume down */}
       <span className={`${btn} -left-[2px] top-[96px] h-7`} />
       <span className={`${btn} -left-[2px] top-[140px] h-12`} />
@@ -188,7 +188,7 @@ function PostScreen({
       </div>
       <div className="flex items-center gap-2 px-3 py-1.5">
         <Avatar url={avatarUrl} size={30} />
-        <span className="text-sm font-semibold">{username}</span>
+        <span className="min-w-0 truncate text-sm font-semibold">{username}</span>
         <span className="ml-auto tracking-widest">···</span>
       </div>
       <div className="min-h-0 flex-1 bg-zinc-800">
@@ -246,7 +246,7 @@ function CommentsScreen({
 
         <div className="mt-5 flex gap-3">
           <Avatar url={null} size={32} />
-          <div className="flex-1">
+          <div className="min-w-0 flex-1 break-words">
             <p className="text-xs">
               <span className="font-semibold">{SAMPLE_USER}</span>{" "}
               <span className="text-zinc-500">Now</span>
@@ -260,7 +260,7 @@ function CommentsScreen({
         {publicReplyEnabled && (
           <div className="mt-4 flex gap-3 pl-10">
             <Avatar url={avatarUrl} size={28} />
-            <div className="flex-1">
+            <div className="min-w-0 flex-1 break-words">
               <p className="text-xs">
                 <span className="font-semibold">{username}</span>{" "}
                 <span className="text-zinc-500">Now</span>
@@ -329,8 +329,8 @@ function DmScreen({
       <div className="flex items-center gap-2 px-3 py-2">
         <span className="w-4">{Ico.back("h-5 w-5")}</span>
         <Avatar url={avatarUrl} size={30} />
-        <span className="text-sm font-semibold">{username}</span>
-        <span className="ml-auto flex items-center gap-3">
+        <span className="min-w-0 truncate text-sm font-semibold">{username}</span>
+        <span className="ml-auto flex shrink-0 items-center gap-3">
           {Ico.phone("h-5 w-5")}
           {Ico.video("h-5 w-5")}
         </span>
@@ -342,7 +342,7 @@ function DmScreen({
             <div className="flex items-end gap-2">
               <Avatar url={avatarUrl} size={24} />
               <div className="max-w-[80%] overflow-hidden rounded-2xl rounded-bl-md bg-zinc-800">
-                <p className="whitespace-pre-wrap px-3 py-2 text-sm">{openingDmMessage || "Your opening message…"}</p>
+                <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm">{openingDmMessage || "Your opening message…"}</p>
                 <div className="mx-1.5 mb-1.5 rounded-xl bg-zinc-700 px-4 py-1.5 text-center text-sm font-medium text-white">
                   {openingDmButtonLabel || "Button label"}
                 </div>
@@ -360,7 +360,7 @@ function DmScreen({
             <div className="flex items-end gap-2">
               <Avatar url={avatarUrl} size={24} />
               <div className="max-w-[80%] overflow-hidden rounded-2xl rounded-bl-md bg-zinc-800">
-                <p className="whitespace-pre-wrap px-3 py-2 text-sm">
+                <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm">
                   {followPromptMessage ||
                     "quick favor before i send your link. i don't make any money from this, it's free. if you want to support me, just don't unfollow after, and star the repo on github if it helps you. tap the button once you're following and i'll send it over"}
                 </p>
@@ -388,7 +388,7 @@ function DmScreen({
               <Avatar url={avatarUrl} size={24} />
               <div className="max-w-[80%] overflow-hidden rounded-2xl rounded-bl-md bg-zinc-800">
                 {(!showCard || bodyText) && (
-                  <p className="whitespace-pre-wrap px-3 py-2 text-sm">
+                  <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm">
                     {!revealMessage
                       ? "Write a message"
                       : showCard
@@ -416,7 +416,7 @@ function DmScreen({
           <div className="flex items-end gap-2">
             <Avatar url={avatarUrl} size={24} />
             <div className="max-w-[80%] rounded-2xl rounded-bl-md bg-zinc-800 px-3 py-2">
-              <p className="whitespace-pre-wrap text-sm">
+              <p className="whitespace-pre-wrap break-words text-sm">
                 {followUpMessage.trim()
                   ? followUpMessage.replace(/\{username\}/g, SAMPLE_USER)
                   : "Btw just wanted to say thanks for following me, I appreciate the support 🙌"}
@@ -493,7 +493,7 @@ export default function CampaignPreview(props: CampaignPreviewProps) {
             key={t.key}
             type="button"
             onClick={() => onTabChange(t.key)}
-            className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
+            className={`min-h-11 rounded-full px-5 py-1.5 text-sm transition-colors sm:min-h-0 sm:px-4 ${
               tab === t.key
                 ? "bg-background font-medium text-foreground ring-1 ring-accent/40"
                 : "text-muted hover:text-foreground"

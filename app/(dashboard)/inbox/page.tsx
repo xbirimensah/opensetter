@@ -382,8 +382,10 @@ export default function InboxPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-between gap-4">
-        <h1 className="text-lg font-semibold text-foreground">Inbox</h1>
+      {/* The top bar already titles the page on mobile; the row only
+          remains there for the account picker. */}
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <h1 className="hidden text-lg font-semibold text-foreground sm:block">Inbox</h1>
         {accounts.length > 1 && (
           <AccountSelect
             accounts={accounts}
@@ -394,7 +396,8 @@ export default function InboxPage() {
         )}
       </div>
 
-      <div className="grid h-[calc(100dvh-11rem)] grid-cols-1 overflow-hidden rounded border border-border sm:grid-cols-[300px_1fr]">
+      {/* Mobile height also clears the bottom nav and safe-area insets. */}
+      <div className="grid h-[calc(100dvh-12rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[22rem] grid-cols-1 overflow-hidden rounded border border-border sm:grid-cols-[minmax(240px,300px)_minmax(0,1fr)] lg:h-[calc(100dvh-11rem)]">
         {/* Conversation list. On mobile it takes the full pane and is hidden
             once a thread is open (ManyChat-style); on sm+ it is always shown. */}
         <div
@@ -464,11 +467,11 @@ export default function InboxPage() {
             </div>
           ) : (
             <>
-              <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold text-foreground">
+              <div className="flex min-w-0 shrink-0 items-center gap-2 border-b border-border px-3 py-1.5 text-sm font-semibold text-foreground sm:px-4 sm:py-3">
                 <button
                   type="button"
                   onClick={() => setActiveId(null)}
-                  className="-ml-1 rounded px-2 py-1 text-muted hover:text-foreground sm:hidden"
+                  className="-ml-2 inline-flex min-h-11 min-w-11 items-center justify-center rounded px-2 text-muted hover:text-foreground sm:hidden"
                   aria-label="Back to conversations"
                 >
                   Back
@@ -487,7 +490,7 @@ export default function InboxPage() {
                       onChange={(e) => void setThreadMode(e.target.value)}
                       disabled={aiBusy}
                       title="How the AI setter handles this thread"
-                      className="ml-auto shrink-0 rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-muted focus:border-accent/40 focus:outline-none disabled:opacity-50"
+                      className="ml-auto min-h-11 max-w-[11rem] shrink-0 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-medium text-muted focus:border-accent/40 focus:outline-none disabled:opacity-50 sm:min-h-0 sm:text-[11px]"
                     >
                       {THREAD_MODES.map((mode) => (
                         <option key={mode.value} value={mode.value}>
@@ -499,7 +502,7 @@ export default function InboxPage() {
                 })()}
               </div>
 
-              <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+              <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3 sm:p-4">
                 {threadLoading && messages.length === 0 ? (
                   <p className="text-sm text-muted">Loading…</p>
                 ) : messages.length === 0 ? (
@@ -511,7 +514,7 @@ export default function InboxPage() {
                       className={`flex ${m.fromMe ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
+                        className={`max-w-[85%] min-w-0 rounded-lg px-3 py-2 text-sm sm:max-w-[75%] ${
                           m.fromMe
                             ? "bg-accent text-white"
                             : "bg-surface text-foreground border border-border"
@@ -537,7 +540,7 @@ export default function InboxPage() {
                 const editValue = draftEdits[heldDraft.id] ?? heldDraft.draftText;
                 return (
                   <div className="shrink-0 border-t border-accent/30 bg-accent/5 p-3">
-                    <div className="flex items-baseline justify-between">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-2">
                       <span className="text-xs font-semibold text-accent">
                         AI draft waiting for review
                       </span>
@@ -554,8 +557,11 @@ export default function InboxPage() {
                         }))
                       }
                       rows={2}
-                      className="mt-2 w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent/40 focus:outline-none"
+                      className="mt-2 w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-base text-foreground focus:border-accent/40 focus:outline-none sm:text-sm"
                     />
+                    <p className="mt-1 text-[11px] text-faint">
+                      Edits before sending are saved as a voice correction for this contact.
+                    </p>
                     {draftError && (
                       <p className="mt-1 text-xs text-error">{draftError}</p>
                     )}
@@ -564,7 +570,7 @@ export default function InboxPage() {
                         type="button"
                         onClick={() => void actOnDraft(heldDraft.id, "dismiss")}
                         disabled={aiBusy}
-                        className="rounded-lg px-3 py-1.5 text-xs text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
+                        className="min-h-11 rounded-lg px-4 py-1.5 text-sm text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-50 sm:min-h-0 sm:px-3 sm:text-xs"
                       >
                         Dismiss
                       </button>
@@ -572,7 +578,7 @@ export default function InboxPage() {
                         type="button"
                         onClick={() => void actOnDraft(heldDraft.id, "approve")}
                         disabled={aiBusy || !editValue.trim()}
-                        className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                        className="min-h-11 rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-0 sm:px-3 sm:text-xs"
                       >
                         Approve & send
                       </button>
@@ -581,7 +587,7 @@ export default function InboxPage() {
                 );
               })()}
 
-              <div className="shrink-0 border-t border-border p-3">
+              <div className="shrink-0 border-t border-border p-2 sm:p-3">
                 {sendError && (
                   <p className="mb-2 text-xs text-error">{sendError}</p>
                 )}
@@ -591,14 +597,18 @@ export default function InboxPage() {
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={handleKeyDown}
                     rows={1}
-                    placeholder="Write a reply…  (Enter to send, Shift+Enter for a new line)"
-                    className="max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+                    enterKeyHint="send"
+                    aria-label="Reply"
+                    placeholder="Write a reply…"
+                    title="Enter to send, Shift+Enter for a new line"
+                    // 16px on phones: iOS zooms into smaller focused inputs.
+                    className="max-h-32 min-h-11 min-w-0 flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-base text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none sm:min-h-[40px] sm:text-sm"
                   />
                   <button
                     type="button"
                     onClick={() => void handleSend()}
                     disabled={sending || !draft.trim()}
-                    className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                    className="min-h-11 shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-0"
                   >
                     {sending ? "Sending…" : "Send"}
                   </button>

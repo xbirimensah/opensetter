@@ -30,7 +30,7 @@ export default function AccountSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-w-52 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-accent/40"
+        className="min-h-11 w-full min-w-0 rounded-xl border border-border bg-surface px-3 py-2 text-base text-foreground outline-none transition-colors focus:border-accent/40 sm:min-h-0 sm:w-auto sm:min-w-52 sm:text-sm"
       >
         {includeAll && <option value="all">All accounts</option>}
         {accounts.map((account) => (

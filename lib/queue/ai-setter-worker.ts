@@ -18,15 +18,24 @@ import type {
 import type { ProcessInboundDmJob, ProcessWindowNudgeJob } from "./client";
 import { generateSetterDraft, generateWindowNudge } from "@/lib/ai-setter/generate";
 import { scheduleWindowNudge } from "@/lib/ai-setter/send";
-import { evaluateAutoSendSafety, isTrivialAcknowledgement } from "@/lib/ai-setter/safety";
+import {
+  evaluateAutoSendSafety,
+  isTrivialAcknowledgement,
+  type VoiceEvidence,
+} from "@/lib/ai-setter/safety";
 import { sendAiReply } from "@/lib/ai-setter/send";
 import type { DraftReply } from "@/lib/ai-setter/types";
+import { loadVoiceContext, type VoiceContext } from "@/lib/ai-setter/voice-context";
+import {
+  languageFromSetting,
+  resolveChatLanguage,
+  type ChatLanguage,
+} from "@/lib/ai-setter/language";
 
 // The setter reads the whole thread with this user; each message is
 // truncated when rendered, so even long threads stay prompt-sized. The
 // ceiling only guards against pathological threads.
 const HISTORY_LIMIT = 400;
-const STYLE_ANCHOR_LIMIT = 50;
 /** After a human replies manually, the setter stays out this long. */
 const HUMAN_TAKEOVER_PAUSE_MS = 6 * 60 * 60 * 1000;
 const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -67,29 +76,77 @@ async function recordSkip(
     });
 }
 
-async function loadPromptInputs(conversationId: string) {
-  const [recent, humanMessages] = await Promise.all([
-    prisma.dmMessage.findMany({
-      where: { conversationId },
-      orderBy: { sentAt: "desc" },
-      take: HISTORY_LIMIT,
-    }),
-    prisma.dmMessage.findMany({
-      where: { conversationId, direction: "OUT", source: "HUMAN" },
-      orderBy: { sentAt: "desc" },
-      take: STYLE_ANCHOR_LIMIT,
-      select: { text: true },
-    }),
-  ]);
+async function loadHistory(conversationId: string) {
+  const recent = await prisma.dmMessage.findMany({
+    where: { conversationId },
+    orderBy: { sentAt: "desc" },
+    take: HISTORY_LIMIT,
+  });
+  return [...recent].reverse().map((message) => ({
+    direction: message.direction,
+    source: message.source,
+    text: message.text,
+    sentAt: message.sentAt,
+  }));
+}
 
+/** Voice inputs plus the language this chat runs in. */
+async function loadVoice(
+  conversation: Pick<DmConversation, "id" | "participantId" | "instagramAccountId">,
+  config: AiSetterConfig,
+  incomingText: string
+): Promise<{ voice: VoiceContext; chatLanguage: ChatLanguage }> {
+  const voice = await loadVoiceContext({
+    id: conversation.id,
+    participantId: conversation.participantId,
+    instagramAccountId: conversation.instagramAccountId,
+  });
+  const chatLanguage =
+    languageFromSetting(config.language) ??
+    resolveChatLanguage(incomingText, voice.humanStyleAnchor);
+  return { voice, chatLanguage };
+}
+
+/** Draft-generation config shared by replies and nudges. */
+function draftConfig(config: AiSetterConfig, workspaceId: string) {
   return {
-    history: recent.reverse().map((message) => ({
-      direction: message.direction,
-      source: message.source,
-      text: message.text,
-      sentAt: message.sentAt,
-    })),
-    humanStyleAnchor: humanMessages.reverse().map((message) => message.text),
+    persona: config.persona,
+    goal: config.goal,
+    bookingLink: config.bookingLink,
+    language: config.language,
+    knowledgeEnabled: config.knowledgeEnabled,
+    styleExamplesEnabled: config.styleExamplesEnabled,
+    minConfidence: config.minConfidence,
+    voiceRules: config.voiceRules,
+    styleCorpusEnabled: config.styleCorpusEnabled ?? true,
+    instagramAccountId: config.instagramAccountId,
+    llmSelection: {
+      workspaceId,
+      provider: config.llmProvider ?? null,
+      model: config.llmModel ?? null,
+    },
+  };
+}
+
+interface SafetyContext {
+  chatLanguage: ChatLanguage;
+  recentAiReplies: string[];
+  voiceEvidence: VoiceEvidence;
+}
+
+function safetyContextFor(
+  voice: VoiceContext,
+  chatLanguage: ChatLanguage,
+  config: AiSetterConfig
+): SafetyContext {
+  return {
+    chatLanguage,
+    recentAiReplies: voice.recentAiReplies,
+    voiceEvidence: {
+      sameChatHumanMessages: voice.humanStyleAnchor.length,
+      corpusEntries: voice.corpusEntryCount,
+      strict: config.strictVoiceEvidence ?? false,
+    },
   };
 }
 
@@ -108,6 +165,8 @@ async function deliverDraft(params: {
   /** Thread and anchor for the late-supersede re-check before sending. */
   conversationId: string;
   supersededAfter: Date;
+  /** Language, repetition and voice-evidence inputs for the send gate. */
+  safetyContext: SafetyContext;
 }): Promise<void> {
   const {
     job,
@@ -118,12 +177,14 @@ async function deliverDraft(params: {
     draft,
     conversationId,
     supersededAfter,
+    safetyContext,
   } = params;
 
   const safety = evaluateAutoSendSafety({
     incomingText,
     draft,
     minConfidence: config.minConfidence,
+    ...safetyContext,
   });
 
   const shouldAutoSend = mode === "AUTO" && safety.allowed;
@@ -247,11 +308,13 @@ export async function processWindowNudge(
   });
   if (!lastMessage || lastMessage.direction !== "OUT") return;
 
+  const workspaceId = conversation.instagramAccount.workspaceId;
   const existing = await prisma.aiReplyLog.findUnique({
     where: { inboundMid: `nudge:${conversationId}:${windowAnchorTs}` },
   });
   if (existing) {
     if (existing.status !== ("PENDING" satisfies AiReplyStatus)) return;
+    const resumed = await loadVoice(conversation, config, existing.inboundText);
     await deliverDraft({
       job,
       config,
@@ -267,31 +330,26 @@ export async function processWindowNudge(
       },
       conversationId,
       supersededAfter: new Date(windowAnchorTs),
+      safetyContext: safetyContextFor(resumed.voice, resumed.chatLanguage, config),
     });
     return;
   }
 
-  const inputs = await loadPromptInputs(conversationId);
+  const history = await loadHistory(conversationId);
+  const lastInboundText =
+    [...history].reverse().find((message) => message.direction === "IN")
+      ?.text ?? "(quiet prospect)";
+  const { voice, chatLanguage } = await loadVoice(conversation, config, lastInboundText);
   const quietHours = Math.round((Date.now() - windowAnchorTs) / 3_600_000);
   const draft = await generateWindowNudge({
     participantUsername: conversation.participantUsername,
-    history: inputs.history,
-    humanStyleAnchor: inputs.humanStyleAnchor,
+    history,
+    humanStyleAnchor: voice.humanStyleAnchor,
+    voiceCorrections: voice.voiceCorrections,
+    chatLanguage,
     quietHours,
-    config: {
-      persona: config.persona,
-      goal: config.goal,
-      bookingLink: config.bookingLink,
-      language: config.language,
-      knowledgeEnabled: config.knowledgeEnabled,
-      styleExamplesEnabled: config.styleExamplesEnabled,
-      minConfidence: config.minConfidence,
-    },
+    config: draftConfig(config, workspaceId),
   });
-
-  const lastInboundText =
-    [...inputs.history].reverse().find((message) => message.direction === "IN")
-      ?.text ?? "(quiet prospect)";
 
   let replyLogId: string;
   try {
@@ -324,6 +382,7 @@ export async function processWindowNudge(
     draft,
     conversationId,
     supersededAfter: new Date(windowAnchorTs),
+    safetyContext: safetyContextFor(voice, chatLanguage, config),
   });
 }
 
@@ -445,6 +504,7 @@ export async function processInboundDm(
     // A previous attempt crashed after drafting; resume delivery only if
     // it never reached a terminal state.
     if (existing.status !== ("PENDING" satisfies AiReplyStatus)) return;
+    const resumed = await loadVoice(conversation, config, text);
     await deliverDraft({
       job,
       config,
@@ -453,6 +513,7 @@ export async function processInboundDm(
       incomingText: text,
       conversationId: conversation.id,
       supersededAfter: sentAt,
+      safetyContext: safetyContextFor(resumed.voice, resumed.chatLanguage, config),
       draft: {
         reply: existing.draftText,
         confidence: existing.confidence,
@@ -464,21 +525,18 @@ export async function processInboundDm(
     return;
   }
 
-  const inputs = await loadPromptInputs(conversation.id);
+  const [history, { voice, chatLanguage }] = await Promise.all([
+    loadHistory(conversation.id),
+    loadVoice(conversation, config, text),
+  ]);
   const draft = await generateSetterDraft({
     incomingText: text,
     participantUsername: conversation.participantUsername,
-    history: inputs.history,
-    humanStyleAnchor: inputs.humanStyleAnchor,
-    config: {
-      persona: config.persona,
-      goal: config.goal,
-      bookingLink: config.bookingLink,
-      language: config.language,
-      knowledgeEnabled: config.knowledgeEnabled,
-      styleExamplesEnabled: config.styleExamplesEnabled,
-      minConfidence: config.minConfidence,
-    },
+    history,
+    humanStyleAnchor: voice.humanStyleAnchor,
+    voiceCorrections: voice.voiceCorrections,
+    chatLanguage,
+    config: draftConfig(config, account.workspaceId),
   });
 
   let replyLogId: string;
@@ -512,5 +570,6 @@ export async function processInboundDm(
     draft,
     conversationId: conversation.id,
     supersededAfter: sentAt,
+    safetyContext: safetyContextFor(voice, chatLanguage, config),
   });
 }

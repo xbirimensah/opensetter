@@ -210,7 +210,7 @@ describe("prompt assembly", () => {
       ],
       humanStyleAnchor: ["ja easy, machen wir"],
       knowledgeContext: "- Offer: mentorship at 2k",
-      styleExamples: "- Incoming: hi\n  Reply was: yo",
+      styleExamples: "- You wrote (en): yo",
       persona: config.persona,
       goal: config.goal,
       bookingLink: config.bookingLink,

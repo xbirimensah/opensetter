@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
@@ -14,6 +14,18 @@ export const metadata: Metadata = {
     "instagram ai setter",
     "social commerce",
     "manychat alternative",
+  ],
+};
+
+// viewport-fit=cover lets the app shell pad itself with the iOS safe-area
+// insets (notch, home indicator) instead of the browser letterboxing it.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#0b0b0d" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f7f8" },
   ],
 };
 

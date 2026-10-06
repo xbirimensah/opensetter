@@ -320,18 +320,20 @@ export default function CampaignsPage() {
               onChange={handleAccountChange}
             />
           )}
-          <Link
-            href="/campaigns/import"
-            className="px-4 py-2 rounded border border-border text-sm font-medium text-muted hover:text-foreground"
-          >
-            Import
-          </Link>
-          <Link
-            href="/campaigns/new"
-            className="px-4 py-2 rounded bg-accent text-sm font-medium text-white hover:bg-accent-hover"
-          >
-            New Campaign
-          </Link>
+          <div className="flex gap-3">
+            <Link
+              href="/campaigns/import"
+              className="inline-flex min-h-11 flex-1 items-center justify-center px-4 py-2 rounded border border-border text-sm font-medium text-muted hover:text-foreground sm:min-h-0 sm:flex-none"
+            >
+              Import
+            </Link>
+            <Link
+              href="/campaigns/new"
+              className="inline-flex min-h-11 flex-1 items-center justify-center px-4 py-2 rounded bg-accent text-sm font-medium text-white hover:bg-accent-hover sm:min-h-0 sm:flex-none"
+            >
+              New Campaign
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -342,15 +344,15 @@ export default function CampaignsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search campaigns by name, keyword, or message…"
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none"
+            className="w-full min-w-0 rounded-lg border border-border bg-surface px-3 py-2.5 text-base text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none sm:py-2 sm:text-sm"
           />
-          <div className="inline-flex shrink-0 rounded-lg bg-surface p-1">
+          <div className="flex shrink-0 rounded-lg bg-surface p-1 sm:inline-flex">
             {(["all", "active", "paused"] as const).map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => setStatusFilter(s)}
-                className={`rounded-md px-3 py-1.5 text-sm capitalize transition-colors ${
+                className={`min-h-11 flex-1 rounded-md px-3 py-1.5 text-sm capitalize transition-colors sm:min-h-0 sm:flex-none ${
                   statusFilter === s
                     ? "bg-background font-medium text-foreground ring-1 ring-accent/40"
                     : "text-muted hover:text-foreground"
@@ -365,14 +367,14 @@ export default function CampaignsPage() {
 
       {/* Empty state */}
       {automations.length === 0 && (
-        <div className="panel rounded p-12 text-center">
+        <div className="panel rounded p-6 text-center sm:p-12">
           <h3 className="text-lg font-semibold mb-2">No campaigns yet</h3>
           <p className="text-sm text-muted mb-6 max-w-sm mx-auto">
             Create your first comment-to-DM campaign to turn a post or reel into a measurable conversation flow.
           </p>
           <Link
             href="/campaigns/new"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded bg-accent text-sm font-semibold text-white hover:bg-accent-hover transition-colors"
+            className="inline-flex min-h-11 items-center gap-2 px-5 py-2.5 rounded bg-accent text-sm font-semibold text-white hover:bg-accent-hover transition-colors"
           >
             Create Campaign
           </Link>
@@ -396,7 +398,7 @@ export default function CampaignsPage() {
             onClick={() => router.push(`/campaigns/${auto.id}`)}
             className="panel rounded p-4 hover:border-border-hover transition-all cursor-pointer"
           >
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap sm:gap-4">
               {auto.postId && thumbnails[auto.postId] && (
                 videoUrl ? (
                   <button
@@ -439,9 +441,9 @@ export default function CampaignsPage() {
                 )
               )}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-sm font-semibold truncate">{auto.name}</h3>
-                  <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs text-muted">
+                <div className="flex flex-wrap items-center gap-2 mb-2 sm:flex-nowrap">
+                  <h3 className="min-w-0 max-w-full text-sm font-semibold truncate">{auto.name}</h3>
+                  <span className="max-w-full shrink-0 truncate rounded-full border border-border px-2 py-0.5 text-xs text-muted">
                     @{auto.instagramAccount.username}
                   </span>
                   <span
@@ -475,7 +477,7 @@ export default function CampaignsPage() {
                   {auto.keywords.map((kw) => (
                     <span
                       key={kw}
-                      className="px-2 py-0.5 rounded-md bg-accent/10 text-accent text-xs font-medium border border-accent/10"
+                      className="max-w-full break-all px-2 py-0.5 rounded-md bg-accent/10 text-accent text-xs font-medium border border-accent/10"
                     >
                       {kw}
                     </span>
@@ -509,7 +511,7 @@ export default function CampaignsPage() {
                     {auto.analytics.topKeywords.map((keyword) => (
                       <span
                         key={keyword.keyword}
-                        className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted"
+                        className="max-w-full break-all rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted"
                       >
                         {keyword.keyword}: {keyword.count}
                       </span>
@@ -520,14 +522,14 @@ export default function CampaignsPage() {
 
               {/* Actions */}
               <div
-                className="flex items-center gap-2"
+                className="flex w-full items-center justify-end gap-3 border-t border-border pt-3 sm:w-auto sm:gap-2 sm:border-0 sm:pt-0"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Copy reel URL */}
                 {auto.postUrl && (
                   <button
                     onClick={() => void copyReelUrl(auto)}
-                    className="shrink-0 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground"
+                    className="min-h-11 shrink-0 rounded-full border border-border px-4 py-1 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground sm:min-h-0 sm:px-2.5"
                   >
                     {copiedId === auto.id ? "Copied!" : "Copy URL"}
                   </button>
@@ -535,8 +537,11 @@ export default function CampaignsPage() {
                 {/* Toggle */}
                 <button
                   onClick={() => toggleActive(auto.id, auto.isActive)}
+                  aria-label={auto.isActive ? "Pause campaign" : "Activate campaign"}
+                  aria-pressed={auto.isActive}
                   className={`
-                    relative w-11 h-6 rounded-full transition-colors
+                    relative w-11 h-6 shrink-0 rounded-full transition-colors
+                    before:absolute before:-inset-y-2.5 before:-inset-x-1 sm:before:hidden
                     ${auto.isActive ? "bg-accent" : "bg-border-hover"}
                   `}
                 >
@@ -555,7 +560,7 @@ export default function CampaignsPage() {
                       setMenuOpenId((cur) => (cur === auto.id ? null : auto.id))
                     }
                     aria-label="More actions"
-                    className="px-2 py-1 rounded text-lg leading-none text-muted hover:text-foreground"
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center px-2 py-1 rounded text-lg leading-none text-muted hover:text-foreground sm:min-h-0 sm:min-w-0"
                   >
                     ⋯
                   </button>
@@ -568,7 +573,7 @@ export default function CampaignsPage() {
                       <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
                         <button
                           onClick={() => void duplicateAutomation(auto)}
-                          className="block w-full px-3 py-2 text-left text-sm text-foreground hover:bg-surface-hover"
+                          className="block w-full px-3 py-3 text-left text-sm sm:py-2 text-foreground hover:bg-surface-hover"
                         >
                           Duplicate
                         </button>
@@ -577,7 +582,7 @@ export default function CampaignsPage() {
                             setMenuOpenId(null);
                             void deleteAutomation(auto.id);
                           }}
-                          className="block w-full px-3 py-2 text-left text-sm text-error hover:bg-surface-hover"
+                          className="block w-full px-3 py-3 text-left text-sm sm:py-2 text-error hover:bg-surface-hover"
                         >
                           Delete
                         </button>
@@ -595,11 +600,11 @@ export default function CampaignsPage() {
       {/* Reel lightbox */}
       {playingVideo && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]"
           onClick={() => setPlayingVideo(null)}
         >
           <div
-            className="relative flex flex-col items-end gap-2"
+            className="relative flex max-w-full flex-col items-end gap-2"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-4 text-sm">
@@ -608,7 +613,7 @@ export default function CampaignsPage() {
                   href={playingVideo.postUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-muted hover:text-foreground"
+                  className="inline-flex min-h-11 items-center text-muted hover:text-foreground sm:min-h-0"
                 >
                   Open on Instagram
                 </a>
@@ -616,7 +621,7 @@ export default function CampaignsPage() {
               <button
                 type="button"
                 onClick={() => setPlayingVideo(null)}
-                className="text-muted hover:text-foreground"
+                className="inline-flex min-h-11 items-center text-muted hover:text-foreground sm:min-h-0"
               >
                 Close
               </button>

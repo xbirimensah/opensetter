@@ -112,7 +112,10 @@ grant execute on function public.opensetter_hybrid_search(vector, text, integer,
 --
 -- Optional. Each row pairs a real incoming message with the reply the
 -- operator actually sent, redacted before insert. The setter retrieves
--- these as phrasing examples only, never as facts.
+-- only the operator's reply as a phrasing example, never as fact. The
+-- incoming side belongs to another contact: the search below returns it
+-- as null so it never leaves the database (the column stays in the
+-- signature for compatibility with older clients).
 
 create table if not exists public.opensetter_style_examples (
   id uuid primary key default gen_random_uuid(),
@@ -156,7 +159,7 @@ security invoker
 set search_path = public
 as $$
   select
-    s.incoming_text,
+    null::text as incoming_text,
     s.outgoing_text,
     s.language,
     s.chat_kind,

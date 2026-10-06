@@ -1,3 +1,5 @@
+import type { ChatLanguage } from "./language";
+
 /**
  * Shared types for the AI DM setter.
  *
@@ -34,6 +36,12 @@ export interface SetterPromptContext {
   knowledgeContext: string;
   /** Style examples retrieved from the isolated style index. */
   styleExamples: string;
+  /** Examples from the owner's local style corpus, already rendered. */
+  corpusExamples?: string;
+  /** Contact-scoped corrections for this exact chat, oldest first. */
+  voiceCorrections?: string[];
+  /** Resolved chat language; "unknown" lets the model match the message. */
+  targetLanguage?: ChatLanguage;
   persona?: string | null;
   goal?: string | null;
   bookingLink?: string | null;

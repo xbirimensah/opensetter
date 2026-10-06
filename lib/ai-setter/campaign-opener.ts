@@ -9,6 +9,7 @@
  */
 
 import { completeSetterPrompt } from "./llm";
+import { resolveLlmTarget, type LlmSelection } from "./providers/resolve";
 
 const MAX_OPENER_LENGTH = 800;
 
@@ -19,6 +20,8 @@ export interface PersonalizeOpenerParams {
   commenterName?: string | null;
   persona?: string | null;
   goal?: string | null;
+  /** The account's UI-selected provider; absent uses the env provider. */
+  llmSelection?: LlmSelection;
 }
 
 /**
@@ -75,9 +78,13 @@ export async function personalizeCampaignOpener(
       "</untrusted>",
     ].join("\n");
 
+    const target = params.llmSelection
+      ? await resolveLlmTarget(params.llmSelection)
+      : null;
     const raw = await completeSetterPrompt(
       buildSystemPrompt(params),
-      userPrompt
+      userPrompt,
+      target
     );
     return validateOpenerText(raw, params.baseMessage);
   } catch (error: unknown) {
