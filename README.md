@@ -4,7 +4,7 @@
 
 Open source Instagram comment-to-DM automation with an AI DM setter.
 
-Built by [Obiri Mensah](https://github.com/obirimensah05) on top of [OpenReply](https://github.com/diwenne/openreply) by Diwen Huang.
+Built on top of [OpenReply](https://github.com/diwenne/openreply) by Diwen Huang.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
 [![Built with Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
@@ -83,7 +83,7 @@ That builds a local SQLite knowledge base with locally computed embeddings; the 
 
 OpenSetter is a fork of [OpenReply](https://github.com/diwenne/openreply) by [Diwen Huang](https://github.com/diwenne) (with contributions by Anish Raj), which provides the entire comment-to-DM engine, dashboard, and Meta integration this project stands on. If OpenSetter is useful to you, star their repo too.
 
-The AI reply engine is adapted from a private WhatsApp auto-reply bridge by Obiri Mensah, rebuilt for Instagram on top of OpenReply's queue and worker.
+The AI reply engine is adapted from a private WhatsApp auto-reply bridge, rebuilt for Instagram on top of OpenReply's queue and worker.
 
 ## License
 

@@ -21,7 +21,7 @@ export default function SetupPanel({
 }: {
   form: SetterConfigForm;
   update: UpdateForm;
-  knowledgeBackend: "supabase" | "sqlite" | null;
+  knowledgeBackend: "brain-api" | "supabase" | "sqlite" | null;
   saveBar: React.ReactNode;
 }) {
   return (
@@ -77,11 +77,13 @@ export default function SetupPanel({
         onChange={(v) => update("knowledgeEnabled", v)}
         label="Second brain"
         hint={
-          knowledgeBackend === "supabase"
-            ? "Pull facts about you and your offer from your connected Supabase knowledge base."
-            : knowledgeBackend === "sqlite"
-              ? "Pull facts about you and your offer from your local knowledge base file."
-              : "No knowledge base yet. Create one in 2 minutes: drop markdown files about you and your offer into ./knowledge on the server, then run: npm run knowledge:ingest -- ./knowledge (or connect Supabase, see docs/ai-setter.md)."
+          knowledgeBackend === "brain-api"
+            ? "Pull facts about you and your offer from your second brain via the brain API."
+            : knowledgeBackend === "supabase"
+              ? "Pull facts about you and your offer from your connected Supabase knowledge base."
+              : knowledgeBackend === "sqlite"
+                ? "Pull facts about you and your offer from your local knowledge base file."
+                : "No knowledge base yet. Create one in 2 minutes: drop markdown files about you and your offer into ./knowledge on the server, then run: npm run knowledge:ingest -- ./knowledge (or connect Supabase, see docs/ai-setter.md)."
         }
       />
       <Toggle

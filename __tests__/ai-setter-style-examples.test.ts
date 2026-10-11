@@ -35,6 +35,7 @@ beforeEach(() => {
   process.env.SECOND_BRAIN_SUPABASE_URL = "https://brain.example.supabase.co";
   process.env.SECOND_BRAIN_SUPABASE_SERVICE_ROLE_KEY = "service-role";
   delete process.env.AI_SETTER_EMBEDDINGS;
+  delete process.env.SECOND_BRAIN_BACKEND;
 });
 
 afterEach(() => {

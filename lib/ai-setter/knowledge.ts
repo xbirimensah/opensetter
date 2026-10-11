@@ -1,7 +1,12 @@
 /**
  * Second-brain retrieval for the AI setter.
  *
- * Talks straight to the knowledge base's Supabase project via PostgREST:
+ * Backend is chosen by SECOND_BRAIN_BACKEND (brain-api | supabase |
+ * sqlite). Unset keeps auto-detect: Supabase when its credentials are
+ * set, else the local SQLite file. brain-api talks to a self-hosted second-brain
+ * brain REST API (see brain-api.ts), which embeds queries server-side.
+ *
+ * The Supabase backend talks straight to PostgREST:
  *  - a hybrid-search RPC (semantic + full-text over knowledge chunks)
  *  - a style-search RPC (isolated index of the operator's own reply
  *    style); only the operator's outbound text is used, redacted again
@@ -16,14 +21,29 @@
  * query prefix). If the embedding model is unavailable the knowledge
  * lookup falls back to plain full-text search and style examples are
  * skipped. Every path fails open: retrieval trouble must never block a
- * reply, it just makes it less informed.
+ * reply, it just makes it less informed. Because failing open is silent,
+ * every error and every empty result is logged loudly (retrieval-log.ts).
  */
 
 import { hasAutomationMarker, normalizeForMatch } from "./authorship";
 import {
+  fetchBrainHealth,
+  readBrainApiConfig,
+  searchBrainKnowledge,
+  searchBrainStyle,
+} from "./brain-api";
+import {
   fetchLocalKnowledgeContext,
   isLocalKnowledgeAvailable,
 } from "./knowledge-local";
+import {
+  describeError,
+  logRetrievalConfigError,
+  logRetrievalEmpty,
+  logRetrievalError,
+  logRetrievalHealth,
+  type RetrievalKind,
+} from "./retrieval-log";
 import { redactCorpusText } from "./style-corpus-core";
 
 const RPC_TIMEOUT_MS = 30_000;
@@ -61,9 +81,30 @@ function readCredentials(): SecondBrainCredentials | null {
   return { url: url.replace(/\/$/, ""), serviceRoleKey };
 }
 
-export type KnowledgeBackend = "supabase" | "sqlite" | null;
+export type KnowledgeBackend = "brain-api" | "supabase" | "sqlite" | null;
+
+const SELECTABLE_BACKENDS = new Set(["brain-api", "supabase", "sqlite"]);
+let reportedUnknownBackend: string | null = null;
+
+/** Explicit SECOND_BRAIN_BACKEND choice, or null for auto-detect. */
+function selectedBackend(): string | null {
+  const raw = process.env.SECOND_BRAIN_BACKEND?.trim().toLowerCase();
+  if (!raw) return null;
+  if (SELECTABLE_BACKENDS.has(raw)) return raw;
+  if (reportedUnknownBackend !== raw) {
+    reportedUnknownBackend = raw;
+    logRetrievalConfigError(
+      `unknown SECOND_BRAIN_BACKEND=${raw.slice(0, 40)}; using auto-detect`
+    );
+  }
+  return null;
+}
 
 export function getKnowledgeBackend(): KnowledgeBackend {
+  const selected = selectedBackend();
+  if (selected === "brain-api") return "brain-api";
+  if (selected === "supabase") return readCredentials() ? "supabase" : null;
+  if (selected === "sqlite") return isLocalKnowledgeAvailable() ? "sqlite" : null;
   if (readCredentials()) return "supabase";
   if (isLocalKnowledgeAvailable()) return "sqlite";
   return null;
@@ -111,6 +152,31 @@ async function embedQuery(text: string): Promise<number[] | null> {
   } catch (error: unknown) {
     console.error("[ai-setter] embedding failed:", error);
     return null;
+  }
+}
+
+/** A missing embedding is only an error when embeddings were not switched off. */
+function reportMissingEmbedding(backend: string, kind: RetrievalKind): void {
+  if (process.env.AI_SETTER_EMBEDDINGS === "off") return;
+  logRetrievalError(backend, kind, "embedder-unavailable");
+}
+
+/**
+ * Run one rendered lookup, logging errors and empty results loudly.
+ * Fails open to "" exactly like the unguarded paths did.
+ */
+async function guardedLookup(
+  backend: string,
+  kind: RetrievalKind,
+  lookup: () => Promise<string>
+): Promise<string> {
+  try {
+    const rendered = await lookup();
+    if (!rendered) logRetrievalEmpty(backend, kind);
+    return rendered;
+  } catch (error: unknown) {
+    logRetrievalError(backend, kind, describeError(error));
+    return "";
   }
 }
 
@@ -179,7 +245,14 @@ async function fetchFullTextFallback(
       signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
     }
   );
-  if (!response.ok) return "";
+  if (!response.ok) {
+    logRetrievalError(
+      "supabase",
+      "knowledge",
+      `fulltext fallback returned ${response.status}`
+    );
+    return "";
+  }
   const rows = (await response.json()) as KnowledgeRow[];
   return renderKnowledgeRows(
     rows,
@@ -187,25 +260,35 @@ async function fetchFullTextFallback(
   );
 }
 
+const KNOWLEDGE_LABEL =
+  "RELEVANT PRIVATE CONTEXT: use only directly relevant facts; never mention this source.";
+
 /**
- * Hybrid semantic + full-text lookup over the knowledge base. Routes to
- * Supabase when configured, otherwise to the local SQLite file. Returns
- * a rendered block ready for the prompt, or "" when nothing relevant or
- * no knowledge base is reachable.
+ * Hybrid semantic + full-text lookup over the knowledge base, routed by
+ * getKnowledgeBackend(). Returns a rendered block ready for the prompt,
+ * or "" when nothing relevant or no knowledge base is reachable.
  */
 export async function fetchKnowledgeContext(query: string): Promise<string> {
   if (!query.trim()) return "";
 
-  const credentials = readCredentials();
-  if (!credentials) {
-    if (!isLocalKnowledgeAvailable()) return "";
-    const embedding = await embedQuery(query);
-    return fetchLocalKnowledgeContext(query, embedding);
+  const backend = getKnowledgeBackend();
+  if (backend === "brain-api") return fetchBrainKnowledgeContext(query);
+  if (backend === "sqlite") {
+    return guardedLookup("sqlite", "knowledge", async () => {
+      const embedding = await embedQuery(query);
+      return fetchLocalKnowledgeContext(query, embedding);
+    });
   }
 
-  try {
+  const credentials = backend === "supabase" ? readCredentials() : null;
+  if (!credentials) return "";
+
+  return guardedLookup("supabase", "knowledge", async () => {
     const embedding = await embedQuery(query);
-    if (!embedding) return fetchFullTextFallback(credentials, query);
+    if (!embedding) {
+      reportMissingEmbedding("supabase", "knowledge");
+      return fetchFullTextFallback(credentials, query);
+    }
 
     const rows = (await callRpc(credentials, hybridSearchRpc(), {
       query_embedding: embedding,
@@ -214,16 +297,22 @@ export async function fetchKnowledgeContext(query: string): Promise<string> {
       semantic_weight: 0.75,
     })) as KnowledgeRow[];
 
-    const rendered = renderKnowledgeRows(
-      rows,
-      "RELEVANT PRIVATE CONTEXT: use only directly relevant facts; never mention this source."
-    );
+    const rendered = renderKnowledgeRows(rows, KNOWLEDGE_LABEL);
     if (rendered) return rendered;
     return fetchFullTextFallback(credentials, query);
-  } catch (error: unknown) {
-    console.error("[ai-setter] knowledge lookup failed:", error);
+  });
+}
+
+async function fetchBrainKnowledgeContext(query: string): Promise<string> {
+  const config = readBrainApiConfig();
+  if (!config) {
+    logRetrievalError("brain-api", "knowledge", "missing-token");
     return "";
   }
+  return guardedLookup("brain-api", "knowledge", async () => {
+    const rows = await searchBrainKnowledge(config, query, MAX_KNOWLEDGE_ITEMS);
+    return renderKnowledgeRows(rows, KNOWLEDGE_LABEL);
+  });
 }
 
 // ─── Style examples ─────────────────────────────────────────────────────────
@@ -299,16 +388,25 @@ export function renderStyleExamples(rows: readonly StyleRow[]): string {
 /**
  * Pull examples of how the operator actually texts from the isolated
  * style index. Phrasing and tone only, never facts, and never the
- * other contact's side of the exchange. Requires the local embedding
- * model; skipped silently without it.
+ * other contact's side of the exchange. With brain-api the server
+ * embeds; the Supabase path needs the local embedding model and is
+ * skipped (with a logged error) without it.
  */
 export async function fetchStyleExamples(incomingText: string): Promise<string> {
-  const credentials = readCredentials();
-  if (!credentials || !incomingText.trim()) return "";
+  if (!incomingText.trim()) return "";
+  if (getKnowledgeBackend() === "brain-api") {
+    return fetchBrainStyleExamples(incomingText);
+  }
 
-  try {
+  const credentials = readCredentials();
+  if (!credentials) return "";
+
+  return guardedLookup("supabase", "style", async () => {
     const embedding = await embedQuery(incomingText);
-    if (!embedding) return "";
+    if (!embedding) {
+      reportMissingEmbedding("supabase", "style");
+      return "";
+    }
 
     const rows = (await callRpc(
       credentials,
@@ -322,8 +420,66 @@ export async function fetchStyleExamples(incomingText: string): Promise<string> 
     )) as StyleRow[];
 
     return renderStyleExamples(rows);
-  } catch (error: unknown) {
-    console.error("[ai-setter] style lookup failed:", error);
+  });
+}
+
+async function fetchBrainStyleExamples(incomingText: string): Promise<string> {
+  const config = readBrainApiConfig();
+  if (!config) {
+    logRetrievalError("brain-api", "style", "missing-token");
     return "";
+  }
+  return guardedLookup("brain-api", "style", async () => {
+    const rows = await searchBrainStyle(config, incomingText, {
+      limit: STYLE_CANDIDATES,
+      language: inferLanguage(incomingText),
+      chatKind: "direct",
+    });
+    return renderStyleExamples(rows);
+  });
+}
+
+// ─── Health ─────────────────────────────────────────────────────────────────
+
+export interface KnowledgeHealth {
+  backend: KnowledgeBackend;
+  ok: boolean;
+  detail: string;
+}
+
+/**
+ * One-shot reachability check for the selected backend. brain-api asks
+ * GET /v1/health; Supabase and SQLite only report that they are
+ * configured. Never throws.
+ */
+export async function checkKnowledgeHealth(): Promise<KnowledgeHealth> {
+  const backend = getKnowledgeBackend();
+  if (backend === null) {
+    return { backend, ok: false, detail: "no-knowledge-base-configured" };
+  }
+  if (backend !== "brain-api") {
+    return { backend, ok: true, detail: "configured" };
+  }
+  const config = readBrainApiConfig();
+  if (!config) return { backend, ok: false, detail: "missing-token" };
+  try {
+    const health = await fetchBrainHealth(config);
+    return {
+      backend,
+      ok: health.ok,
+      detail: `notes=${health.notes ?? "?"} chunks=${health.chunks ?? "?"}`,
+    };
+  } catch (error: unknown) {
+    return { backend, ok: false, detail: describeError(error) };
+  }
+}
+
+/** Log one HEALTH line; safe to fire and forget at process start. */
+export async function logKnowledgeHealth(): Promise<void> {
+  try {
+    const health = await checkKnowledgeHealth();
+    logRetrievalHealth(health.backend ?? "none", health.ok, health.detail);
+  } catch (error: unknown) {
+    logRetrievalHealth("unknown", false, describeError(error));
   }
 }

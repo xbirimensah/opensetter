@@ -63,7 +63,7 @@ export default function AiSetterPage() {
   const [form, setForm] = useState<SetterConfigForm>(DEFAULT_FORM);
   const [defaultVoiceRules, setDefaultVoiceRules] = useState("");
   const [knowledgeBackend, setKnowledgeBackend] = useState<
-    "supabase" | "sqlite" | null
+    "brain-api" | "supabase" | "sqlite" | null
   >(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [saving, setSaving] = useState(false);

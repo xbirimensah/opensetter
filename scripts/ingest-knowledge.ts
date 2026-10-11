@@ -9,6 +9,8 @@
  *    schema from schema/knowledge-base.sql.
  *  - Without it: writes a local SQLite file (SECOND_BRAIN_SQLITE_PATH,
  *    default ./data/knowledge.db). No accounts, no setup.
+ *  - With SECOND_BRAIN_BACKEND=brain-api: refuses. That knowledge base is
+ *    the second-brain vault, indexed on the server; add files there instead.
  *
  * Usage:
  *   npm run knowledge:ingest -- ./knowledge
@@ -239,6 +241,14 @@ async function openSqlite(): Promise<SqliteHandle> {
 }
 
 async function main(): Promise<void> {
+  if (process.env.SECOND_BRAIN_BACKEND?.trim().toLowerCase() === "brain-api") {
+    console.error(
+      "SECOND_BRAIN_BACKEND=brain-api: knowledge now lives in the second-brain vault on the server. " +
+        "Add .md files under the vault Knowledge/ folder; the vault indexer picks them up. Nothing was ingested."
+    );
+    process.exit(1);
+  }
+
   const useSupabase = Boolean(SUPABASE_URL && SERVICE_KEY);
 
   const dir = process.argv[2] ?? "./knowledge";

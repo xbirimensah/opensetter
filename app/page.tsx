@@ -241,7 +241,7 @@ function DashboardPreview() {
 
 async function getGitHubStars(): Promise<number | null> {
   try {
-    const res = await fetch("https://api.github.com/repos/obirimensah05/opensetter", {
+    const res = await fetch("https://api.github.com/repos/xbirimensah/opensetter", {
       headers: { Accept: "application/vnd.github+json" },
       next: { revalidate: 3600 },
     });

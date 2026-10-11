@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate deploy",
     "worker": "tsx worker/dm-worker.ts",
     "knowledge:ingest": "tsx scripts/ingest-knowledge.ts",
+    "knowledge:check": "tsx scripts/check-knowledge.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -3,6 +3,7 @@ import { recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 import { reconcileComments } from "@/lib/polling/comment-reconciler";
 import { reconcileDms } from "@/lib/polling/dm-reconciler";
 import { recoverInterruptedSends } from "@/lib/ai-setter/send";
+import { logKnowledgeHealth } from "@/lib/ai-setter/knowledge";
 import os from "node:os";
 
 const worker = createDMWorker();
@@ -21,6 +22,10 @@ const DM_POLL_INTERVAL_MS = Number(
 );
 
 console.log("[DM Worker] Started");
+
+// One loud line about the second-brain backend: retrieval fails open, so a
+// dead knowledge base would otherwise only show up as blander replies.
+void logKnowledgeHealth();
 
 // Quarantine any sends interrupted by the previous shutdown before new
 // jobs start flowing.

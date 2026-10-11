@@ -12,6 +12,8 @@
 
 import { existsSync, statSync } from "fs";
 
+import { describeError, logRetrievalError } from "./retrieval-log";
+
 const MAX_ITEMS = 5;
 const MAX_CHARS = 3000;
 
@@ -134,7 +136,7 @@ export async function fetchLocalKnowledgeContext(
       .sort((a, b) => b.score - a.score);
     return render(keywordScored);
   } catch (error: unknown) {
-    console.error("[ai-setter] local knowledge lookup failed:", error);
+    logRetrievalError("sqlite", "knowledge", describeError(error));
     return "";
   }
 }
