@@ -213,6 +213,40 @@ RPCs with `SECOND_BRAIN_HYBRID_SEARCH_RPC`, `SECOND_BRAIN_STYLE_SEARCH_RPC`,
 and `SECOND_BRAIN_DOCUMENTS_TABLE`. The expected signatures are in
 [schema/knowledge-base.sql](../schema/knowledge-base.sql).
 
+### Second-brain API (self-hosted knowledge base)
+
+If your knowledge lives in a self-hosted second-brain vault, point the setter at its
+REST API instead of Supabase. The API embeds queries server-side, so no
+local embedding model is loaded on this path.
+
+```bash
+SECOND_BRAIN_BACKEND=brain-api
+# BRAIN_API_URL=http://127.0.0.1:8790
+# BRAIN_API_TOKEN=...            (or leave unset and use the token file)
+# BRAIN_API_TOKEN_FILE=~/.config/opensetter/brain-api-token
+```
+
+Knowledge uses `POST /v1/search` (hybrid), style memory uses
+`POST /v1/style/search`; only the operator's outbound text is mapped
+out of the style response. `npm run knowledge:ingest` refuses in this
+mode: add files to the vault instead. Keep the Supabase vars in place
+and unset `SECOND_BRAIN_BACKEND` to roll back.
+
+### Retrieval health
+
+Retrieval fails open (a reply still goes out), so every backend logs
+loudly instead:
+
+- `[ai-setter][retrieval] RETRIEVAL_ERROR backend=... kind=knowledge|style reason=...`
+  on errors, non-2xx responses, a missing token, or an unavailable embedder
+- `[ai-setter][retrieval] RETRIEVAL_EMPTY backend=... kind=...` when a
+  lookup yields nothing usable
+- `[ai-setter][retrieval] HEALTH backend=... ok=...` once at worker start
+
+`npm run knowledge:check -- "a query"` runs one knowledge and one style
+lookup with the current env and exits non-zero on an unhealthy backend
+or an empty result (`--show` also prints the rendered blocks).
+
 ### Style memory
 
 A second, isolated index of your real replies teaches the setter how you
@@ -220,8 +254,8 @@ actually text (register, length, slang). It is retrieved as phrasing
 examples only, never as facts. Only your own outbound text reaches the
 prompt, re-redacted (emails, links, phones, handles, IBANs) and without
 automation-authored replies; the prospect message a reply answered is
-never sent to the model, since it belongs to a different contact. Supabase backend
-only; see the `opensetter_style_examples` table in the schema. If you
+never sent to the model, since it belongs to a different contact. Supabase or
+brain API backend only; see the `opensetter_style_examples` table in the schema. If you
 skip it, the setter still anchors on your verbatim messages within each
 thread.
 
@@ -245,6 +279,11 @@ takes over where possible).
 | `AI_SETTER_CLI_PROVIDERS` | on | `off` hides local CLIs from the Models tab and refuses them at runtime |
 | `AI_CREDENTIALS_ENCRYPTION_KEY` | - | 32-byte hex; encrypts provider keys saved in the UI |
 | `AI_PROVIDER_ALLOW_PRIVATE_BASE_URL` | off | `true` allows private/local base URLs for UI providers |
+| `SECOND_BRAIN_BACKEND` | auto | `brain-api`, `supabase`, or `sqlite`; unset picks Supabase when configured, else SQLite |
+| `BRAIN_API_URL` | `http://127.0.0.1:8790` | Second-brain API base URL |
+| `BRAIN_API_TOKEN` | - | Brain API bearer token (wins over the token file) |
+| `BRAIN_API_TOKEN_FILE` | `~/.config/opensetter/brain-api-token` | File holding the brain API token |
+| `BRAIN_API_SEARCH_FOLDERS` | - | Optional comma list limiting knowledge search to vault folders |
 | `SECOND_BRAIN_SQLITE_PATH` | `./data/knowledge.db` | Local knowledge base file |
 | `SECOND_BRAIN_SUPABASE_URL` | - | Supabase knowledge base |
 | `SECOND_BRAIN_SUPABASE_SERVICE_ROLE_KEY` | - | Supabase credentials |
