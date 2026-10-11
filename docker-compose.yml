@@ -39,6 +39,8 @@ services:
   web:
     build: .
     env_file: .env
+    environment:
+      MEDIA_DIR: /app/data/media
     ports:
       - "3000:3000"
     depends_on:
@@ -47,6 +49,9 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    volumes:
+      # Flow uploads and inbound DM media, shared with the worker.
+      - media:/app/data/media
 
   worker:
     build: .
@@ -58,11 +63,15 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    environment:
+      MEDIA_DIR: /app/data/media
     volumes:
       # Cache the locally downloaded embedding model across restarts.
       - hfcache:/root/.cache/huggingface
+      - media:/app/data/media
 
 volumes:
   pgdata:
   redisdata:
   hfcache:
+  media:

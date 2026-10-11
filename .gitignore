@@ -46,3 +46,9 @@ next-env.d.ts
 
 # runtime logs (web + worker)
 /logs/
+
+# Local data: knowledge base, uploaded flow media, inbound DM media copies
+/data/
+
+# Account-specific scripts (private URLs, handles): never published
+/scripts/local/
