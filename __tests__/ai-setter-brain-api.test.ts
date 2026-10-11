@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -122,12 +122,15 @@ describe("knowledge search", () => {
             path: "Knowledge/Offer.md",
             title: "Offer",
             heading: "Pricing",
-            snippet: "Coaching costs 2k per month",
+            snippet: "costs 2k",
+            text: "Coaching costs 2k per month, paid monthly, cancel any time.",
             score: 0.8,
             folder: "Knowledge",
             updated: "2026-10-01",
           },
+          // Older server without `text`: falls back to the snippet.
           { title: "Bio", heading: "", snippet: "Based in Frankfurt" },
+          { title: "Empty text", text: "   ", snippet: "Snippet wins over blank text" },
         ],
       })
     );
@@ -140,16 +143,22 @@ describe("knowledge search", () => {
     expect(request.url).toBe("http://127.0.0.1:8790/v1/search");
     expect(request.method).toBe("POST");
     expect(request.headers.Authorization).toBe("Bearer test-token");
-    expect(Object.keys(request.body).sort()).toEqual(["limit", "mode", "query"]);
-    expect(request.body).toEqual({ query: "was kostet das coaching", mode: "hybrid", limit: 5 });
+    expect(request.body).toEqual({
+      query: "was kostet das coaching",
+      mode: "hybrid",
+      limit: 5,
+      text_chars: 1000,
+    });
     expect(block).toContain("RELEVANT PRIVATE CONTEXT");
-    expect(block).toContain("- Offer > Pricing: Coaching costs 2k per month");
+    expect(block).toContain("- Offer > Pricing: Coaching costs 2k per month, paid monthly, cancel any time.");
+    expect(block).not.toContain("- Offer > Pricing: costs 2k");
     expect(block).toContain("- Bio: Based in Frankfurt");
+    expect(block).toContain("- Empty text: Snippet wins over blank text");
     expect(pipelineSpy).not.toHaveBeenCalled();
   });
 
   it("honours BRAIN_API_URL and BRAIN_API_SEARCH_FOLDERS", async () => {
-    process.env.BRAIN_API_URL = "http://brain.local:9000/";
+    process.env.BRAIN_API_URL = "https://brain.example.test:9000/";
     process.env.BRAIN_API_SEARCH_FOLDERS = "Knowledge, Areas ,";
     const fetchMock = mockFetch(() => json({ results: [{ title: "A", snippet: "b" }] }));
     const { fetchKnowledgeContext } = await loadKnowledge();
@@ -157,7 +166,7 @@ describe("knowledge search", () => {
     await fetchKnowledgeContext("offer");
 
     const request = requestOf(fetchMock);
-    expect(request.url).toBe("http://brain.local:9000/v1/search");
+    expect(request.url).toBe("https://brain.example.test:9000/v1/search");
     expect(request.body.folders).toEqual(["Knowledge", "Areas"]);
   });
 
@@ -200,7 +209,7 @@ describe("token sources", () => {
   it("reads the token from BRAIN_API_TOKEN_FILE", async () => {
     delete process.env.BRAIN_API_TOKEN;
     const file = join(tempHome, "token");
-    writeFileSync(file, "file-token\n");
+    writeFileSync(file, "file-token\n", { mode: 0o600 });
     process.env.BRAIN_API_TOKEN_FILE = file;
     const fetchMock = mockFetch(() => json({ results: [{ title: "A", snippet: "b" }] }));
     const { fetchKnowledgeContext } = await loadKnowledge();
@@ -210,10 +219,12 @@ describe("token sources", () => {
     expect(requestOf(fetchMock).headers.Authorization).toBe("Bearer file-token");
   });
 
-  it("defaults to ~/.config/opensetter/brain-api-token", async () => {
+  it("defaults to the read-only ~/.config/opensetter/brain-api-token", async () => {
     delete process.env.BRAIN_API_TOKEN;
     mkdirSync(join(tempHome, ".config", "opensetter"), { recursive: true });
-    writeFileSync(join(tempHome, ".config", "opensetter", "brain-api-token"), "home-token");
+    writeFileSync(join(tempHome, ".config", "opensetter", "brain-api-token"), "home-token", {
+      mode: 0o600,
+    });
     const fetchMock = mockFetch(() => json({ results: [{ title: "A", snippet: "b" }] }));
     const { fetchKnowledgeContext } = await loadKnowledge();
 
@@ -222,9 +233,32 @@ describe("token sources", () => {
     expect(requestOf(fetchMock).headers.Authorization).toBe("Bearer home-token");
   });
 
-  it("prefers BRAIN_API_TOKEN over the token file", async () => {
+  it("refuses a group- or world-readable token file and never sends it", async () => {
+    delete process.env.BRAIN_API_TOKEN;
     const file = join(tempHome, "token");
-    writeFileSync(file, "file-token");
+    writeFileSync(file, "leaky-token", { mode: 0o600 });
+    chmodSync(file, 0o640);
+    process.env.BRAIN_API_TOKEN_FILE = file;
+    const fetchMock = mockFetch(() => json({ results: [] }));
+    const { fetchKnowledgeContext, checkKnowledgeHealth } = await loadKnowledge();
+
+    expect(await fetchKnowledgeContext("offer")).toBe("");
+    const health = await checkKnowledgeHealth();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const errors = logged(errorSpy);
+    expect(errors).toContain(
+      `RETRIEVAL_ERROR backend=brain-api kind=knowledge reason=token_file_permissions path=${file}`
+    );
+    expect(errors).not.toContain("leaky-token");
+    expect(health.ok).toBe(false);
+    expect(health.detail).toContain("token_file_permissions");
+  });
+
+  it("still uses BRAIN_API_TOKEN when the token file has bad permissions", async () => {
+    const file = join(tempHome, "token");
+    writeFileSync(file, "leaky-token", { mode: 0o600 });
+    chmodSync(file, 0o644);
     process.env.BRAIN_API_TOKEN_FILE = file;
     const fetchMock = mockFetch(() => json({ results: [{ title: "A", snippet: "b" }] }));
     const { fetchKnowledgeContext } = await loadKnowledge();
@@ -232,6 +266,57 @@ describe("token sources", () => {
     await fetchKnowledgeContext("offer");
 
     expect(requestOf(fetchMock).headers.Authorization).toBe("Bearer test-token");
+  });
+
+  it("prefers BRAIN_API_TOKEN over the token file", async () => {
+    const file = join(tempHome, "token");
+    writeFileSync(file, "file-token", { mode: 0o600 });
+    process.env.BRAIN_API_TOKEN_FILE = file;
+    const fetchMock = mockFetch(() => json({ results: [{ title: "A", snippet: "b" }] }));
+    const { fetchKnowledgeContext } = await loadKnowledge();
+
+    await fetchKnowledgeContext("offer");
+
+    expect(requestOf(fetchMock).headers.Authorization).toBe("Bearer test-token");
+  });
+});
+
+describe("BRAIN_API_URL safety", () => {
+  it.each([
+    "http://127.0.0.1:8790",
+    "http://localhost:8790/",
+    "http://[::1]:8790",
+    "https://brain.example.test",
+  ])("sends the token to %s", async (url) => {
+    process.env.BRAIN_API_URL = url;
+    const fetchMock = mockFetch(() => json({ results: [{ title: "A", snippet: "b" }] }));
+    const { fetchKnowledgeContext } = await loadKnowledge();
+
+    await fetchKnowledgeContext("offer");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["http://brain.example.test:8790", "brain.example.test"],
+    ["http://100.64.1.2:8790", "100.64.1.2"],
+    ["ftp://127.0.0.1/", "127.0.0.1"],
+    ["not a url", "unparseable"],
+  ])("refuses %s with CONFIG_ERROR and no request", async (url, host) => {
+    process.env.BRAIN_API_URL = url;
+    const fetchMock = mockFetch(() => json({ results: [] }));
+    const { fetchKnowledgeContext, fetchStyleExamples, checkKnowledgeHealth } =
+      await loadKnowledge();
+
+    expect(await fetchKnowledgeContext("offer")).toBe("");
+    expect(await fetchStyleExamples("wann hast du zeit?")).toBe("");
+    const health = await checkKnowledgeHealth();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const errors = logged(errorSpy);
+    expect(errors).toContain(`CONFIG_ERROR BRAIN_API_URL must be loopback http or https; refusing host=${host}`);
+    expect(errors).not.toContain("test-token");
+    expect(health).toEqual({ backend: "brain-api", ok: false, detail: `insecure-url host=${host}` });
   });
 });
 
@@ -289,6 +374,28 @@ describe("style search", () => {
     expect(block).not.toContain("23456789");
     expect(block).not.toContain("jana.private@example.com");
     expect(block).not.toContain("0.91");
+  });
+
+  it("renders rows that carry the server's flags and redaction markers", async () => {
+    mockFetch(() =>
+      json({
+        results: [
+          {
+            outgoing_text: "nimm einfach den key [REDACTED:api_key]",
+            language: "de",
+            chat_kind: "direct",
+            eligible_for_retrieval: true,
+            is_sensitive: false,
+            similarity: 0.7,
+          },
+        ],
+      })
+    );
+    const { fetchStyleExamples } = await loadKnowledge();
+
+    const block = await fetchStyleExamples("wie geht das?");
+
+    expect(block).toContain("- You wrote (de): nimm einfach den key [REDACTED:api_key]");
   });
 
   it("drops the incoming side at the mapping boundary", async () => {

@@ -31,6 +31,8 @@ import {
   readBrainApiConfig,
   searchBrainKnowledge,
   searchBrainStyle,
+  type BrainApiConfig,
+  type BrainApiConfigProblem,
 } from "./brain-api";
 import {
   fetchLocalKnowledgeContext,
@@ -49,6 +51,12 @@ import { redactCorpusText } from "./style-corpus-core";
 const RPC_TIMEOUT_MS = 30_000;
 const MAX_KNOWLEDGE_ITEMS = 5;
 const MAX_KNOWLEDGE_CHARS = 3000;
+/**
+ * Brain API context per hit. About one old Supabase chunk (~1k chars), so
+ * 2-3 hits fit MAX_KNOWLEDGE_CHARS instead of one 2000-char default
+ * crowding out the rest.
+ */
+const KNOWLEDGE_TEXT_CHARS = 1000;
 const MAX_STYLE_EXAMPLES = 4;
 const MAX_STYLE_EXAMPLE_CHARS = 180;
 /** Over-fetch (the RPC caps at 6) since unsafe rows are dropped client-side. */
@@ -180,6 +188,34 @@ async function guardedLookup(
   }
 }
 
+function describeConfigProblem(problem: BrainApiConfigProblem): string {
+  if (problem.reason === "insecure-url") {
+    return `insecure-url host=${problem.host}`;
+  }
+  if (problem.reason === "token_file_permissions") {
+    return `token_file_permissions path=${problem.path}`;
+  }
+  return "missing-token";
+}
+
+/**
+ * Brain API config for one lookup, or null after logging why not. An
+ * unsafe BRAIN_API_URL is a CONFIG_ERROR (the token is never sent);
+ * token trouble is a RETRIEVAL_ERROR. Both fail open.
+ */
+function brainConfigOrLog(kind: RetrievalKind): BrainApiConfig | null {
+  const result = readBrainApiConfig();
+  if (result.ok) return result.config;
+  if (result.reason === "insecure-url") {
+    logRetrievalConfigError(
+      `BRAIN_API_URL must be loopback http or https; refusing host=${result.host}`
+    );
+  } else {
+    logRetrievalError("brain-api", kind, describeConfigProblem(result));
+  }
+  return null;
+}
+
 // ─── Supabase REST helpers ──────────────────────────────────────────────────
 
 async function callRpc(
@@ -304,13 +340,13 @@ export async function fetchKnowledgeContext(query: string): Promise<string> {
 }
 
 async function fetchBrainKnowledgeContext(query: string): Promise<string> {
-  const config = readBrainApiConfig();
-  if (!config) {
-    logRetrievalError("brain-api", "knowledge", "missing-token");
-    return "";
-  }
+  const config = brainConfigOrLog("knowledge");
+  if (!config) return "";
   return guardedLookup("brain-api", "knowledge", async () => {
-    const rows = await searchBrainKnowledge(config, query, MAX_KNOWLEDGE_ITEMS);
+    const rows = await searchBrainKnowledge(config, query, {
+      limit: MAX_KNOWLEDGE_ITEMS,
+      textChars: KNOWLEDGE_TEXT_CHARS,
+    });
     return renderKnowledgeRows(rows, KNOWLEDGE_LABEL);
   });
 }
@@ -424,11 +460,8 @@ export async function fetchStyleExamples(incomingText: string): Promise<string> 
 }
 
 async function fetchBrainStyleExamples(incomingText: string): Promise<string> {
-  const config = readBrainApiConfig();
-  if (!config) {
-    logRetrievalError("brain-api", "style", "missing-token");
-    return "";
-  }
+  const config = brainConfigOrLog("style");
+  if (!config) return "";
   return guardedLookup("brain-api", "style", async () => {
     const rows = await searchBrainStyle(config, incomingText, {
       limit: STYLE_CANDIDATES,
@@ -460,10 +493,12 @@ export async function checkKnowledgeHealth(): Promise<KnowledgeHealth> {
   if (backend !== "brain-api") {
     return { backend, ok: true, detail: "configured" };
   }
-  const config = readBrainApiConfig();
-  if (!config) return { backend, ok: false, detail: "missing-token" };
+  const result = readBrainApiConfig();
+  if (!result.ok) {
+    return { backend, ok: false, detail: describeConfigProblem(result) };
+  }
   try {
-    const health = await fetchBrainHealth(config);
+    const health = await fetchBrainHealth(result.config);
     return {
       backend,
       ok: health.ok,

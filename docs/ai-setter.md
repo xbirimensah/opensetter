@@ -226,7 +226,14 @@ SECOND_BRAIN_BACKEND=brain-api
 # BRAIN_API_TOKEN_FILE=~/.config/opensetter/brain-api-token
 ```
 
-Knowledge uses `POST /v1/search` (hybrid), style memory uses
+Use the read-only search-scoped token (`token-search`). The token file
+must be owner-only (`chmod 600`); a group- or world-readable file is
+refused. `BRAIN_API_URL` must be loopback over http (`127.0.0.1`,
+`localhost`, `::1`) or https; anything else is refused with a
+`CONFIG_ERROR` and the token is never sent.
+
+Knowledge uses `POST /v1/search` (hybrid, `text_chars: 1000` per hit,
+mapped from `text`, falling back to `snippet`), style memory uses
 `POST /v1/style/search`; only the operator's outbound text is mapped
 out of the style response. `npm run knowledge:ingest` refuses in this
 mode: add files to the vault instead. Keep the Supabase vars in place
@@ -280,9 +287,9 @@ takes over where possible).
 | `AI_CREDENTIALS_ENCRYPTION_KEY` | - | 32-byte hex; encrypts provider keys saved in the UI |
 | `AI_PROVIDER_ALLOW_PRIVATE_BASE_URL` | off | `true` allows private/local base URLs for UI providers |
 | `SECOND_BRAIN_BACKEND` | auto | `brain-api`, `supabase`, or `sqlite`; unset picks Supabase when configured, else SQLite |
-| `BRAIN_API_URL` | `http://127.0.0.1:8790` | Second-brain API base URL |
+| `BRAIN_API_URL` | `http://127.0.0.1:8790` | Second-brain API base URL; loopback http or https only |
 | `BRAIN_API_TOKEN` | - | Brain API bearer token (wins over the token file) |
-| `BRAIN_API_TOKEN_FILE` | `~/.config/opensetter/brain-api-token` | File holding the brain API token |
+| `BRAIN_API_TOKEN_FILE` | `~/.config/opensetter/brain-api-token` | File holding the read-only search token; must be mode 600 |
 | `BRAIN_API_SEARCH_FOLDERS` | - | Optional comma list limiting knowledge search to vault folders |
 | `SECOND_BRAIN_SQLITE_PATH` | `./data/knowledge.db` | Local knowledge base file |
 | `SECOND_BRAIN_SUPABASE_URL` | - | Supabase knowledge base |

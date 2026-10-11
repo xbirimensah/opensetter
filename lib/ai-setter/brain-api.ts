@@ -5,8 +5,11 @@
  * Selected with SECOND_BRAIN_BACKEND=brain-api. The server embeds
  * queries itself, so this path never loads a local embedding model.
  * Auth is a bearer token from BRAIN_API_TOKEN, else from the token file
- * (BRAIN_API_TOKEN_FILE, default ~/.config/opensetter/brain-api-token). The
- * file is re-read per call so a rotated token needs no restart.
+ * (BRAIN_API_TOKEN_FILE, default ~/.config/opensetter/brain-api-token, the
+ * read-only search scope). The file is re-read per call so a rotated
+ * token needs no restart, and it is refused when group- or
+ * world-readable. The token is only ever sent to a loopback http URL or
+ * to https; any other BRAIN_API_URL is treated as misconfigured.
  *
  * All brain API field names are mapped to the setter's row shapes here
  * and nowhere else. The style mapping keeps only the operator's own
@@ -14,12 +17,15 @@
  * belongs to an unrelated contact and is dropped at this boundary.
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, statSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
 export const DEFAULT_BRAIN_API_URL = "http://127.0.0.1:8790";
 const DEFAULT_TOKEN_FILE = "~/.config/opensetter/brain-api-token";
+/** Any of these permission bits means someone besides the owner can read it. */
+const GROUP_OR_WORLD_BITS = 0o077;
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 /** Same budget as the Supabase RPC path. */
 const BRAIN_API_TIMEOUT_MS = 30_000;
 
@@ -42,6 +48,16 @@ export interface BrainStyleRow {
   eligible_for_retrieval: boolean | null;
 }
 
+/** Why no usable config exists; callers log and fail open. */
+export type BrainApiConfigProblem =
+  | { reason: "insecure-url"; host: string }
+  | { reason: "missing-token" }
+  | { reason: "token_file_permissions"; path: string };
+
+export type BrainApiConfigResult =
+  | { ok: true; config: BrainApiConfig }
+  | ({ ok: false } & BrainApiConfigProblem);
+
 export interface BrainHealth {
   ok: boolean;
   notes: number | null;
@@ -60,25 +76,69 @@ export function brainApiUrl(): string {
   return url.replace(/\/+$/, "");
 }
 
-export function readBrainApiToken(): string | null {
+/**
+ * True when the token may be sent to `url`: loopback over http, or any
+ * host over https.
+ */
+export function isAllowedBrainApiUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol === "https:") return true;
+  return (
+    parsed.protocol === "http:" &&
+    LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase())
+  );
+}
+
+function hostForLog(url: string): string {
+  try {
+    return new URL(url).hostname || "unknown";
+  } catch {
+    return "unparseable";
+  }
+}
+
+type TokenResult =
+  | { token: string }
+  | { problem: "missing-token" }
+  | { problem: "token_file_permissions"; path: string };
+
+function readToken(): TokenResult {
   const fromEnv = process.env.BRAIN_API_TOKEN?.trim();
-  if (fromEnv) return fromEnv;
+  if (fromEnv) return { token: fromEnv };
   const file = expandHome(
     process.env.BRAIN_API_TOKEN_FILE?.trim() || DEFAULT_TOKEN_FILE
   );
   try {
+    if ((statSync(file).mode & GROUP_OR_WORLD_BITS) !== 0) {
+      return { problem: "token_file_permissions", path: file };
+    }
     const token = readFileSync(file, "utf8").trim();
-    return token || null;
+    return token ? { token } : { problem: "missing-token" };
   } catch {
-    return null;
+    return { problem: "missing-token" };
   }
 }
 
-/** Null when no token is available (caller logs and fails open). */
-export function readBrainApiConfig(): BrainApiConfig | null {
-  const token = readBrainApiToken();
-  if (!token) return null;
-  return { url: brainApiUrl(), token };
+/**
+ * Resolve URL and token. The URL is checked first so the token is not
+ * even read when it could leave the machine in clear text.
+ */
+export function readBrainApiConfig(): BrainApiConfigResult {
+  const url = brainApiUrl();
+  if (!isAllowedBrainApiUrl(url)) {
+    return { ok: false, reason: "insecure-url", host: hostForLog(url) };
+  }
+  const token = readToken();
+  if ("token" in token) return { ok: true, config: { url, token: token.token } };
+  if (token.problem === "token_file_permissions") {
+    return { ok: false, reason: "token_file_permissions", path: token.path };
+  }
+  return { ok: false, reason: "missing-token" };
 }
 
 function searchFolders(): string[] | null {
@@ -149,7 +209,9 @@ export function toKnowledgeRows(payload: unknown): BrainKnowledgeRow[] {
       title && heading && heading !== title
         ? `${title} > ${heading}`
         : title || heading;
-    return { title: label, text: text(row.snippet) };
+    // `text` is the best chunk widened to text_chars; `snippet` is a short
+    // highlight, kept only as a fallback for servers without `text`.
+    return { title: label, text: text(row.text) || text(row.snippet) };
   });
 }
 
@@ -180,9 +242,14 @@ export function toBrainHealth(payload: unknown): BrainHealth {
 export async function searchBrainKnowledge(
   config: BrainApiConfig,
   query: string,
-  limit: number
+  options: { limit: number; textChars: number }
 ): Promise<BrainKnowledgeRow[]> {
-  const body: Record<string, unknown> = { query, mode: "hybrid", limit };
+  const body: Record<string, unknown> = {
+    query,
+    mode: "hybrid",
+    limit: options.limit,
+    text_chars: options.textChars,
+  };
   const folders = searchFolders();
   if (folders) body.folders = folders;
   return toKnowledgeRows(await brainRequest(config, "/v1/search", body));

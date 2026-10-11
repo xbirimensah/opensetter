@@ -51,9 +51,18 @@ async function main(): Promise<number> {
   return passed ? 0 : 1;
 }
 
+/** Message (and HTTP status when present) only, never the whole object. */
+function errorSummary(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown error";
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number"
+    ? `${error.message} (status ${status})`
+    : error.message;
+}
+
 main()
   .then((code) => process.exit(code))
   .catch((error: unknown) => {
-    console.error(error);
+    console.error(`knowledge:check failed: ${errorSummary(error)}`);
     process.exit(1);
   });
