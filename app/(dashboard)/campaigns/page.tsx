@@ -34,6 +34,7 @@ interface Campaign {
   followPromptButtonLabel: string | null;
   isActive: boolean;
   wholeWordMatch: boolean;
+  flow?: { id: string; name: string; status: string } | null;
   instagramAccountId: string;
   instagramAccount: {
     username: string;
@@ -266,6 +267,7 @@ export default function CampaignsPage() {
           followPromptMessage: auto.followPromptMessage,
           followPromptButtonLabel: auto.followPromptButtonLabel,
           wholeWordMatch: auto.wholeWordMatch,
+          ...(auto.flow ? { flowId: auto.flow.id } : {}),
           isActive: false,
         }),
       });
@@ -485,7 +487,9 @@ export default function CampaignsPage() {
                 </div>
 
                 {/* DM preview */}
-                <p className="text-sm text-muted truncate">&ldquo;{auto.dmMessage}&rdquo;</p>
+                <p className="text-sm text-muted truncate">
+                  {auto.flow ? `Runs flow: ${auto.flow.name}` : <>&ldquo;{auto.dmMessage}&rdquo;</>}
+                </p>
 
                 {/* Stats */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-xs text-faint">

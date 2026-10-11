@@ -15,6 +15,7 @@ const tabs = [
   { label: "Inbox", href: "/inbox" },
   { label: "AI Setter", href: "/ai-setter" },
   { label: "Campaigns", href: "/campaigns" },
+  { label: "Flows", href: "/flows" },
   { label: "Dashboard", href: "/dashboard" },
 ];
 
@@ -30,7 +31,8 @@ export default function MobileNav({ onMoreClick }: MobileNavProps) {
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
-      <ul className="grid grid-cols-5">
+      {/* One column per tab plus "More". */}
+      <ul className="grid grid-cols-6">
         {tabs.map((tab) => {
           const isActive =
             pathname === tab.href || pathname.startsWith(tab.href + "/");

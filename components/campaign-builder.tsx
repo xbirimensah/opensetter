@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import PostPicker from "@/components/post-picker";
@@ -58,6 +59,15 @@ interface LoadedCampaign {
   isActive: boolean;
   instagramAccountId: string;
   trackedLinks?: { destinationUrl: string; label?: string | null }[];
+  flowId?: string | null;
+}
+
+/** A flow the campaign can run instead of the simple DM. */
+interface CampaignFlowOption {
+  id: string;
+  name: string;
+  status: "DRAFT" | "ACTIVE" | "PAUSED";
+  firstText: string | null;
 }
 
 interface CampaignBuilderProps {
@@ -187,6 +197,10 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
   const [followUpMessage, setFollowUpMessage] = useState("");
 
+  // Optional flow that replaces the simple DM pipeline ("" = simple DM).
+  const [flowId, setFlowId] = useState("");
+  const [accountFlows, setAccountFlows] = useState<CampaignFlowOption[]>([]);
+
   const [previewTab, setPreviewTab] = useState<PreviewTab>("dm");
   // Below lg the preview stacks under a long form, so it starts collapsed.
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -252,6 +266,45 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       .catch(() => setAccounts([]));
   }, []);
 
+  // Flows of the selected account, for the "run a flow instead" picker.
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    let cancelled = false;
+    fetch(`/api/flows?instagramAccountId=${encodeURIComponent(selectedAccountId)}`, {
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((payload) => {
+        if (cancelled || !payload.success) return;
+        setAccountFlows(payload.data as CampaignFlowOption[]);
+      })
+      .catch(() => {
+        if (!cancelled) setAccountFlows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAccountId]);
+
+  // /campaigns/new?flowId=... preselects that flow and its account.
+  useEffect(() => {
+    if (mode !== "new") return;
+    const requested = new URLSearchParams(window.location.search).get("flowId");
+    if (!requested) return;
+    let cancelled = false;
+    fetch(`/api/flows/${encodeURIComponent(requested)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((payload) => {
+        if (cancelled || !payload.success) return;
+        setSelectedAccountId(payload.data.instagramAccountId);
+        setFlowId(payload.data.id);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
   // Prefill when editing.
   useEffect(() => {
     if (mode !== "edit" || !campaignId) return;
@@ -299,6 +352,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         );
         setFollowUpEnabled(c.followUpEnabled ?? false);
         setFollowUpMessage(c.followUpMessage ?? "");
+        setFlowId(c.flowId ?? "");
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
@@ -378,6 +432,14 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   const username =
     accounts.find((a) => a.id === selectedAccountId)?.username ?? "yourbrand";
 
+  // Drafts and active flows can be picked; a paused one stays listed only
+  // while it is the current choice.
+  const flowOptions = accountFlows.filter(
+    (f) => f.status !== "PAUSED" || f.id === flowId
+  );
+  const selectedFlow = accountFlows.find((f) => f.id === flowId) ?? null;
+  const usesFlow = Boolean(flowId);
+
   function handlePostSelect(
     id: string,
     url?: string,
@@ -402,9 +464,17 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       return setError("Pick a post or reel to trigger the campaign.");
     if (matchMode === "specific" && keywords.length === 0)
       return setError("Add at least one keyword, or switch to any word.");
-    if (!dmMessage.trim()) return setError("Add the DM with the link.");
-    if (openingDmEnabled && (!openingDmMessage.trim() || !openingDmButtonLabel.trim()))
+    // A flow brings its own messages, so the simple-DM checks only apply without one.
+    if (!usesFlow && !dmMessage.trim()) return setError("Add the DM with the link.");
+    if (
+      !usesFlow &&
+      openingDmEnabled &&
+      (!openingDmMessage.trim() || !openingDmButtonLabel.trim())
+    )
       return setError("Your opening DM needs a message and a button label.");
+    // New flow campaigns never start the legacy steps; edits keep them stored
+    // so switching back to the simple DM restores them.
+    const legacyOff = usesFlow && mode === "new";
 
     setSaving(true);
 
@@ -418,10 +488,11 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       matchAnyWord: matchMode === "any",
       keywords: matchMode === "any" ? [] : keywords,
       dmMessage,
-      aiPersonalizeDm,
-      openingDmEnabled,
-      openingDmMessage: openingDmEnabled ? openingDmMessage : null,
-      openingDmButtonLabel: openingDmEnabled ? openingDmButtonLabel : null,
+      flowId: usesFlow ? flowId : null,
+      aiPersonalizeDm: legacyOff ? false : aiPersonalizeDm,
+      openingDmEnabled: legacyOff ? false : openingDmEnabled,
+      openingDmMessage: openingDmEnabled && !legacyOff ? openingDmMessage : null,
+      openingDmButtonLabel: openingDmEnabled && !legacyOff ? openingDmButtonLabel : null,
       publicReplyEnabled,
       publicReplyMessages: publicReplyEnabled
         ? publicReplyMessages.map((m) => m.trim()).filter(Boolean)
@@ -430,13 +501,14 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       linkButtonLabel: linkButtonLabel.trim() || "Open link",
       secondaryDestinationUrl: secondaryDestinationUrl.trim() || "",
       secondaryButtonLabel: secondaryButtonLabel.trim() || "Open link",
-      requireFollow,
-      followPromptMessage: requireFollow ? followPromptMessage.trim() : "",
-      followPromptButtonLabel: requireFollow
-        ? followPromptButtonLabel.trim() || "i'm following"
-        : "",
-      followUpEnabled,
-      followUpMessage: followUpEnabled ? followUpMessage.trim() : "",
+      requireFollow: legacyOff ? false : requireFollow,
+      followPromptMessage: requireFollow && !legacyOff ? followPromptMessage.trim() : "",
+      followPromptButtonLabel:
+        requireFollow && !legacyOff
+          ? followPromptButtonLabel.trim() || "i'm following"
+          : "",
+      followUpEnabled: legacyOff ? false : followUpEnabled,
+      followUpMessage: followUpEnabled && !legacyOff ? followUpMessage.trim() : "",
       isActive: activeValue,
     };
 
@@ -668,6 +740,8 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   setPostId(null);
                   setPostUrl(null);
                   setPostThumb(null);
+                  // Flows belong to one account.
+                  setFlowId("");
                 }}
                 includeAll={false}
                 label="Instagram account"
@@ -731,6 +805,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           >
             any word
           </Radio>
+          {!usesFlow && (
           <div className="rounded-lg border border-border px-3 py-2.5">
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm text-foreground">
@@ -747,6 +822,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
               failure falls back to your static text.
             </p>
           </div>
+          )}
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
             <span className="text-sm text-foreground">
               reply to their comments under the post
@@ -806,6 +882,58 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           )}
         </Section>
 
+        <Section title="Run a flow instead of the simple DM">
+          <select
+            value={flowId}
+            onChange={(e) => setFlowId(e.target.value)}
+            aria-label="Flow to run"
+            className={`${FIELD_CLASS} cursor-pointer`}
+          >
+            <option value="">No, send the simple DM below</option>
+            {flowOptions.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+                {f.status === "DRAFT" ? " (draft)" : f.status === "PAUSED" ? " (paused)" : ""}
+              </option>
+            ))}
+          </select>
+          {usesFlow ? (
+            <div className="space-y-2 rounded-lg border border-accent/30 bg-accent/5 p-3 text-xs text-muted">
+              <p>
+                A matching comment starts this flow. Its first message goes out
+                as the private reply to the comment, so give it a button.
+              </p>
+              {selectedFlow?.status === "DRAFT" && (
+                <p className="text-warning">
+                  This flow is still a draft. Activate it so the campaign can
+                  run it.
+                </p>
+              )}
+              <Link
+                href={`/flows/${flowId}`}
+                className="inline-flex min-h-11 items-center font-medium text-accent hover:underline sm:min-h-0"
+              >
+                Open the flow
+              </Link>
+            </div>
+          ) : (
+            <p className="text-xs text-muted">
+              {flowOptions.length === 0 ? (
+                <>
+                  No flows on this account yet.{" "}
+                  <Link href="/flows" className="text-accent hover:underline">
+                    Build one
+                  </Link>{" "}
+                  for multi-step DMs with buttons, questions and branches.
+                </>
+              ) : (
+                "Pick a flow for multi-step DMs with buttons, questions and branches."
+              )}
+            </p>
+          )}
+        </Section>
+
+        {!usesFlow && (
         <Section title="They will get">
           <div className="rounded-lg border border-border p-3">
             <div className="flex items-center justify-between gap-3">
@@ -871,7 +999,9 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             )}
           </div>
         </Section>
+        )}
 
+        {!usesFlow && (
         <Section title="And then, they will get">
           <div className="rounded-lg border border-border p-3 space-y-2">
             <span className="text-sm text-foreground">a DM with a link</span>
@@ -972,6 +1102,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             )}
           </div>
         </Section>
+        )}
       </div>
 
       {/* Right: preview. Collapsible below lg, always open from lg up. */}
@@ -1002,20 +1133,24 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             sampleComment={keywords[0] ?? ""}
             publicReplyEnabled={publicReplyEnabled}
             publicReplyMessage={publicReplyMessages.find((m) => m.trim()) ?? ""}
-            openingDmEnabled={openingDmEnabled}
+            openingDmEnabled={!usesFlow && openingDmEnabled}
             openingDmMessage={openingDmMessage}
             openingDmButtonLabel={openingDmButtonLabel}
-            revealMessage={dmMessage}
-            hasLink={Boolean(trackedDestinationUrl.trim())}
+            revealMessage={
+              usesFlow ? selectedFlow?.firstText ?? "Your flow's first message" : dmMessage
+            }
+            hasLink={!usesFlow && Boolean(trackedDestinationUrl.trim())}
             linkButtonLabel={linkButtonLabel || "Open link"}
             hasSecondLink={
-              secondLinkOpen && Boolean(secondaryDestinationUrl.trim())
+              !usesFlow &&
+              secondLinkOpen &&
+              Boolean(secondaryDestinationUrl.trim())
             }
             secondLinkButtonLabel={secondaryButtonLabel || "Open link"}
-            requireFollow={requireFollow}
+            requireFollow={!usesFlow && requireFollow}
             followPromptMessage={followPromptMessage}
             followPromptButtonLabel={followPromptButtonLabel || "i'm following"}
-            followUpEnabled={followUpEnabled}
+            followUpEnabled={!usesFlow && followUpEnabled}
             followUpMessage={followUpMessage}
           />
         </div>

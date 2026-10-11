@@ -22,6 +22,7 @@ const pageTitles: Record<string, string> = {
   "/logs": "DM Logs",
   "/settings": "Settings",
   "/diagnostics": "Diagnostics",
+  "/flows": "Flows",
 };
 
 interface TopBarProps {
@@ -38,7 +39,11 @@ export default function TopBar({
   const pathname = usePathname();
   const title =
     pageTitles[pathname] ??
-    (pathname.startsWith("/campaigns/") ? "Campaign" : "Dashboard");
+    (pathname.startsWith("/campaigns/")
+      ? "Campaign"
+      : pathname.startsWith("/flows/")
+        ? "Flow"
+        : "Dashboard");
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background pt-[env(safe-area-inset-top)]">

@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import CampaignPreview, { type PreviewTab } from "@/components/campaign-preview";
+import { flowFirstText, parseFlowGraphShape } from "@/lib/flows/validate";
 
 interface Campaign {
   id: string;
@@ -39,6 +40,9 @@ interface Campaign {
   instagramAccountId: string;
   instagramAccount: { username: string };
   trackedLinks?: { destinationUrl: string; label?: string | null }[];
+  /** Set when the campaign runs a flow instead of the simple DM. */
+  flowId?: string | null;
+  flow?: { id: string; name: string; status: "DRAFT" | "ACTIVE" | "PAUSED" } | null;
   analytics: {
     sent: number;
     skipped: number;
@@ -62,6 +66,8 @@ export default function CampaignDetailPage() {
   const [tab, setTab] = useState<Tab>("insights");
   const [previewTab, setPreviewTab] = useState<PreviewTab>("dm");
   const [busy, setBusy] = useState(false);
+  // First text of the linked flow, for the DM preview.
+  const [flowText, setFlowText] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/automations", { cache: "no-store" })
@@ -103,6 +109,23 @@ export default function CampaignDetailPage() {
         .catch(() => setPostThumb(null));
     }
   }, [campaign]);
+
+  const linkedFlowId = campaign?.flow?.id ?? null;
+  useEffect(() => {
+    if (!linkedFlowId) return;
+    let cancelled = false;
+    fetch(`/api/flows/${linkedFlowId}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((payload) => {
+        if (cancelled || !payload.success) return;
+        const graph = parseFlowGraphShape(payload.data.graph);
+        setFlowText(graph.ok ? flowFirstText(graph.value) : null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedFlowId]);
 
   async function toggleActive() {
     if (!campaign) return;
@@ -216,14 +239,47 @@ export default function CampaignDetailPage() {
           )}
         </Summary>
 
-        {campaign.openingDmEnabled && (
+        {campaign.flow && (
+          <Summary title="And then, they will run a flow">
+            <Link
+              href={`/flows/${campaign.flow.id}`}
+              className="flex items-center justify-between gap-3 rounded border border-border bg-surface px-3 py-2 text-sm text-foreground hover:border-border-hover"
+            >
+              <span className="min-w-0 truncate font-medium text-accent">
+                {campaign.flow.name}
+              </span>
+              <span
+                className={`shrink-0 text-xs ${
+                  campaign.flow.status === "ACTIVE"
+                    ? "text-success"
+                    : campaign.flow.status === "PAUSED"
+                      ? "text-warning"
+                      : "text-muted"
+                }`}
+              >
+                {campaign.flow.status === "ACTIVE"
+                  ? "Active"
+                  : campaign.flow.status === "PAUSED"
+                    ? "Paused"
+                    : "Draft"}
+              </span>
+            </Link>
+            {campaign.flow.status !== "ACTIVE" && (
+              <p className="text-xs text-warning">
+                Activate the flow so this campaign can run it.
+              </p>
+            )}
+          </Summary>
+        )}
+
+        {!campaign.flow && campaign.openingDmEnabled && (
           <Summary title="They will get an opening DM">
             <FieldBox>{campaign.openingDmMessage || "Opening message"}</FieldBox>
             <FieldBox>{campaign.openingDmButtonLabel || "Button"}</FieldBox>
           </Summary>
         )}
 
-        {campaign.requireFollow && (
+        {!campaign.flow && campaign.requireFollow && (
           <Summary title="They must follow first">
             <FieldBox>
               {campaign.followPromptMessage ||
@@ -235,6 +291,7 @@ export default function CampaignDetailPage() {
           </Summary>
         )}
 
+        {!campaign.flow && (
         <Summary title="And then, they will get a DM">
           <FieldBox>{campaign.dmMessage}</FieldBox>
           {hasLink && (
@@ -246,6 +303,7 @@ export default function CampaignDetailPage() {
             </FieldBox>
           )}
         </Summary>
+        )}
       </div>
 
       {/* Right: top bar + tabs */}
@@ -305,22 +363,26 @@ export default function CampaignDetailPage() {
             sampleComment={campaign.matchAnyWord ? "nice!" : campaign.keywords[0] ?? "LINK"}
             publicReplyEnabled={campaign.publicReplyEnabled}
             publicReplyMessage={publicReplies[0] ?? ""}
-            openingDmEnabled={campaign.openingDmEnabled}
+            openingDmEnabled={!campaign.flow && campaign.openingDmEnabled}
             openingDmMessage={campaign.openingDmMessage ?? ""}
             openingDmButtonLabel={campaign.openingDmButtonLabel ?? ""}
-            revealMessage={campaign.dmMessage}
-            hasLink={hasLink}
+            revealMessage={
+              campaign.flow
+                ? flowText ?? `Runs the flow "${campaign.flow.name}"`
+                : campaign.dmMessage
+            }
+            hasLink={!campaign.flow && hasLink}
             linkButtonLabel={campaign.linkButtonLabel ?? "Open link"}
-            hasSecondLink={hasSecondLink}
+            hasSecondLink={!campaign.flow && hasSecondLink}
             secondLinkButtonLabel={
               campaign.trackedLinks?.[1]?.label ?? "Open link"
             }
-            requireFollow={campaign.requireFollow}
+            requireFollow={!campaign.flow && campaign.requireFollow}
             followPromptMessage={campaign.followPromptMessage ?? ""}
             followPromptButtonLabel={
               campaign.followPromptButtonLabel ?? "i'm following"
             }
-            followUpEnabled={campaign.followUpEnabled ?? false}
+            followUpEnabled={!campaign.flow && (campaign.followUpEnabled ?? false)}
             followUpMessage={campaign.followUpMessage ?? ""}
           />
           </div>

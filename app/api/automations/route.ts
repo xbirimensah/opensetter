@@ -26,7 +26,10 @@ const createAutomationSchema = z
     matchAnyPost: z.boolean().optional().default(false),
     keywords: z.array(z.string().min(1).max(50)).max(10).optional().default([]),
     matchAnyWord: z.boolean().optional().default(false),
-    dmMessage: z.string().min(1).max(1000),
+    // May be empty only when the campaign runs a flow instead (see refine).
+    dmMessage: z.string().max(1000).optional().default(""),
+    // Runs this flow instead of the simple DM pipeline. Same Instagram account.
+    flowId: z.string().min(1).max(64).optional().nullable(),
     aiPersonalizeDm: z.boolean().optional().default(false),
     openingDmEnabled: z.boolean().optional().default(false),
     openingDmMessage: z.string().max(1000).optional().nullable(),
@@ -63,6 +66,11 @@ const createAutomationSchema = z
     (d) => d.matchAnyPost || d.pendingNextReel || Boolean(d.postId),
     { message: "Choose which post(s) trigger the campaign", path: ["postId"] }
   )
+  // The simple DM needs its message; a flow brings its own.
+  .refine((d) => Boolean(d.flowId) || d.dmMessage.length >= 1, {
+    message: "Add the DM message, or run a flow instead",
+    path: ["dmMessage"],
+  })
   // And it must match either specific words or any word.
   .refine((d) => d.matchAnyWord || d.keywords.length >= 1, {
     message: "Add at least one keyword, or match any word",
@@ -86,7 +94,10 @@ const updateAutomationSchema = z.object({
   matchAnyPost: z.boolean().optional(),
   keywords: z.array(z.string().min(1).max(50)).max(10).optional(),
   matchAnyWord: z.boolean().optional(),
-  dmMessage: z.string().min(1).max(1000).optional(),
+  // Empty only allowed while the campaign runs a flow (checked below).
+  dmMessage: z.string().max(1000).optional(),
+  // null switches back to the simple DM; undefined leaves it unchanged.
+  flowId: z.string().min(1).max(64).optional().nullable(),
   aiPersonalizeDm: z.boolean().optional(),
   openingDmEnabled: z.boolean().optional(),
   openingDmMessage: z.string().max(1000).optional().nullable(),
@@ -117,6 +128,18 @@ const updateAutomationSchema = z.object({
   secondaryButtonLabel: z.string().max(20).optional().nullable(),
 });
 
+/** A flow a campaign may run: same workspace and same Instagram account. */
+async function findCampaignFlow(
+  flowId: string,
+  workspaceId: string,
+  instagramAccountId: string
+) {
+  return prisma.flow.findFirst({
+    where: { id: flowId, workspaceId, instagramAccountId },
+    select: { id: true },
+  });
+}
+
 export async function GET(request: NextRequest) {
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
@@ -137,6 +160,9 @@ export async function GET(request: NextRequest) {
     include: {
       instagramAccount: {
         select: { username: true, instagramId: true },
+      },
+      flow: {
+        select: { id: true, name: true, status: true },
       },
       _count: {
         select: { dmLogs: true },
@@ -337,6 +363,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const flowId = parsed.data.flowId ?? null;
+  if (flowId && !(await findCampaignFlow(flowId, workspaceId, instagramAccount.id))) {
+    return NextResponse.json(
+      { success: false, error: "Choose a flow from the same Instagram account" },
+      { status: 400 }
+    );
+  }
+
   const { trackedDestinationUrl, secondaryDestinationUrl, secondaryButtonLabel } =
     parsed.data;
 
@@ -391,6 +425,7 @@ export async function POST(request: NextRequest) {
       keywords: matchAnyWord ? [] : parsed.data.keywords,
       matchAnyWord,
       dmMessage: parsed.data.dmMessage,
+      flowId,
       openingDmEnabled,
       openingDmMessage: openingDmEnabled
         ? parsed.data.openingDmMessage || null
@@ -486,6 +521,37 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(
       { success: false, error: "Campaign not found" },
       { status: 404 }
+    );
+  }
+
+  // A campaign without a flow still needs its DM text. Only checked when the
+  // request touches either field, so toggles keep working on any campaign.
+  if (parsed.data.dmMessage !== undefined || parsed.data.flowId !== undefined) {
+    const nextFlowId =
+      parsed.data.flowId !== undefined ? parsed.data.flowId : existing.flowId;
+    const nextDmMessage = parsed.data.dmMessage ?? existing.dmMessage;
+    if (!nextFlowId && nextDmMessage.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid input",
+          details: {
+            formErrors: [],
+            fieldErrors: { dmMessage: ["Add the DM message, or run a flow instead"] },
+          },
+        },
+        { status: 400 }
+      );
+    }
+  }
+
+  if (
+    parsed.data.flowId &&
+    !(await findCampaignFlow(parsed.data.flowId, workspaceId, existing.instagramAccountId))
+  ) {
+    return NextResponse.json(
+      { success: false, error: "Choose a flow from the same Instagram account" },
+      { status: 400 }
     );
   }
 
