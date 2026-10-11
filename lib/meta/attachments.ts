@@ -344,7 +344,12 @@ export function normalizeWebhookMessage(message: unknown): NormalizedDm {
 export function normalizeGraphMessage(message: unknown): NormalizedDm {
   const m = obj(message) ?? {};
   const text = str(m.message)?.trim();
-  const attachments = arr(obj(m.attachments)?.data).flatMap(fromGraphAttachment);
+  // Graph wraps some ordinary texts in an empty generic_template whose title
+  // is a localized "not available" placeholder. A button-less card next to
+  // real text is that placeholder, not content.
+  const attachments = arr(obj(m.attachments)?.data)
+    .flatMap(fromGraphAttachment)
+    .filter((a) => !(text && a.type === "card" && a.buttons.length === 0 && !a.imageUrl));
 
   for (const share of arr(obj(m.shares)?.data)) {
     const s = obj(share);
@@ -382,6 +387,23 @@ const TEXT_KINDS = new Set(["text", "quick_reply", "story_reply", "postback"]);
 export function isMediaOnly(message: { kind?: string | null; text: string }): boolean {
   if (message.text === "[media]") return true;
   return Boolean(message.kind && !TEXT_KINDS.has(message.kind));
+}
+
+/**
+ * Graph cannot show voice notes, view-once media, forwarded stories or
+ * multi-image messages: they all come back as a bare `is_unsupported`.
+ * Only the webhook payload says what they really were, so such a Graph
+ * read must never overwrite a richer row.
+ */
+export function isGraphUnsupportedOnly(message: unknown): boolean {
+  const m = obj(message) ?? {};
+  return (
+    m.is_unsupported === true &&
+    !str(m.message) &&
+    arr(obj(m.attachments)?.data).length === 0 &&
+    arr(obj(m.shares)?.data).length === 0 &&
+    !obj(m.story)
+  );
 }
 
 /**

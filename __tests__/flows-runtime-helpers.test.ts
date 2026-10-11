@@ -95,3 +95,10 @@ describe("network guards", () => {
     expect(isMetaCdnUrl("http://lookaside.fbsbx.com/x")).toBe(false);
   });
 });
+
+describe("giphy GIFs", () => {
+  it("captures Instagram picker GIFs hosted on Giphy", () => {
+    expect(isMetaCdnUrl("https://media4.giphy.com/media/abc/giphy.gif")).toBe(true);
+    expect(isMetaCdnUrl("https://giphy.com.evil.test/x.gif")).toBe(false);
+  });
+});

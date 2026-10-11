@@ -209,3 +209,19 @@ describe("hasGraphContent", () => {
     expect(hasGraphContent({ id: "x", is_unsupported: true })).toBe(true);
   });
 });
+
+describe("Graph quirks found in the inbox census", () => {
+  it("drops Graph's button-less placeholder card next to real text", () => {
+    const result = normalizeGraphMessage({
+      message: "ganz normale Nachricht",
+      attachments: { data: [{ generic_template: { title: "Nicht verfügbar" } }] },
+    });
+    expect(result).toEqual({ kind: "text", text: "ganz normale Nachricht", attachments: [] });
+  });
+
+  it("flags bare is_unsupported reads (voice notes look like this in Graph)", async () => {
+    const { isGraphUnsupportedOnly } = await import("@/lib/meta/attachments");
+    expect(isGraphUnsupportedOnly({ id: "v", message: "", is_unsupported: true })).toBe(true);
+    expect(isGraphUnsupportedOnly({ id: "c", is_unsupported: true, attachments: { data: [{ generic_template: { title: "x", cta: [] } }] } })).toBe(false);
+  });
+});

@@ -627,6 +627,15 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
  * message) and return the conversation, or null for unknown accounts.
  */
 async function mirrorPostback(data: ProcessPostbackJob) {
+  // Our buttons carry our payloads. Anything else (ACT::…, zernio_…) is the
+  // owner tapping another account's bot: Meta reports it as a postback
+  // "from" that bot, so mirroring it would show it inbound and reopen a
+  // window that is not ours. The reconciler mirrors that tap from Graph.
+  const ours =
+    decodeFlowPayload(data.payload) !== null ||
+    data.payload.startsWith("reveal:") ||
+    data.payload.startsWith("followcheck:");
+  if (!ours) return null;
   const account = await prisma.instagramAccount.findUnique({
     where: { instagramId: data.instagramAccountId },
     select: { id: true, instagramId: true, workspaceId: true, accessToken: true },

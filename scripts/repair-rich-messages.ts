@@ -5,9 +5,10 @@
  * ManyChat cards and shares that the inbox could not show. This script:
  *
  *  1. Graph API pass: for every conversation with such rows, reads the
- *     thread (Meta returns full content for the ~20 newest messages) and
- *     rewrites matching rows with kind, attachments and a readable text.
- *     Fresh CDN URLs here mean voice notes and photos can be downloaded.
+ *     thread and rewrites matching rows with kind, attachments and a
+ *     readable text. Fresh CDN URLs here mean photos and videos can be
+ *     downloaded. Graph shows voice notes, view-once media and forwarded
+ *     stories only as a bare is_unsupported; those are left for pass 2.
  *  2. Webhook pass: for rows still unrepaired, finds the raw webhook that
  *     delivered them (WebhookEvent keeps payloads) and normalizes that.
  *     Old CDN URLs may have expired, so downloads can fail; the row still
@@ -26,6 +27,7 @@ import { getConversationMessages, getConversations } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
 import {
   hasGraphContent,
+  isGraphUnsupportedOnly,
   normalizeGraphMessage,
   normalizeWebhookMessage,
   type NormalizedDm,
@@ -85,9 +87,12 @@ async function graphPass(): Promise<number> {
     for (const thread of threads) {
       const contact = thread.participants?.data?.find((p) => p.id !== account.instagramId);
       if (!contact?.id || !wanted.has(contact.id)) continue;
+      // Pace reads so Meta's per-account limit (code 4) never trips for the
+      // live app's own sweep.
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
       const messages = await getConversationMessages(token, thread.id);
       for (const message of messages) {
-        if (!message.id || !hasGraphContent(message)) continue;
+        if (!message.id || !hasGraphContent(message) || isGraphUnsupportedOnly(message)) continue;
         if (await applyRepair(message.id, normalizeGraphMessage(message))) repaired += 1;
       }
     }
@@ -141,6 +146,10 @@ async function webhookPass(): Promise<number> {
 async function main() {
   const before = await prisma.dmMessage.count({ where: { text: "[media]" } });
   console.log(`${before} "[media]" row(s) to repair${DRY_RUN ? " (dry run)" : ""}`);
+  // Graph first for fresh CDN URLs (photos and videos still download).
+  // Graph cannot describe voice notes, view-once media or forwarded
+  // stories (bare is_unsupported); those are skipped there and repaired
+  // from the stored webhook that delivered them.
   const viaGraph = SKIP_GRAPH ? 0 : await graphPass();
   const viaWebhook = await webhookPass();
   const after = await prisma.dmMessage.count({ where: { text: "[media]" } });

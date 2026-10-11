@@ -5,7 +5,7 @@
  * the browser (the inbox decides which card images go through the proxy).
  */
 
-/** Meta CDN hosts the proxy may fetch from. Everything else is refused (SSRF). */
+/** Meta CDN hosts (plus Giphy for GIFs) the proxy may fetch from. Everything else is refused (SSRF). */
 const EXACT_HOSTS = new Set(["lookaside.fbsbx.com"]);
 const HOST_SUFFIXES = [".fbcdn.net", ".cdninstagram.com"];
 
@@ -27,6 +27,8 @@ export function isAllowedMediaUrl(raw: string | null | undefined): boolean {
   if (url.port && url.port !== "443") return false;
   const host = url.hostname.toLowerCase().replace(/\.$/, "");
   if (EXACT_HOSTS.has(host)) return true;
+  // GIFs from Instagram's picker arrive as image attachments on Giphy.
+  if (/^media\d*\.giphy\.com$/.test(host)) return true;
   return HOST_SUFFIXES.some((suffix) => host.endsWith(suffix) && host.length > suffix.length);
 }
 

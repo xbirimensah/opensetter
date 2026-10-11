@@ -23,7 +23,11 @@ import {
 import { decryptToken } from "@/lib/meta/oauth";
 import { getDMQueue, INBOUND_DM_JOB_NAME } from "@/lib/queue/client";
 import { Prisma } from "@/app/generated/prisma/client";
-import { hasGraphContent, normalizeGraphMessage } from "@/lib/meta/attachments";
+import {
+  hasGraphContent,
+  isGraphUnsupportedOnly,
+  normalizeGraphMessage,
+} from "@/lib/meta/attachments";
 import { captureMessageMedia } from "@/lib/media/inbound";
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -51,7 +55,7 @@ async function sweepAccount(
     instagramId: string;
     accessToken: string;
   },
-  options: { maxThreads: number; enqueue: boolean } = {
+  options: { maxThreads: number; enqueue: boolean; paceMs?: number } = {
     maxThreads: MAX_THREADS_PER_ACCOUNT,
     enqueue: true,
   }
@@ -61,7 +65,10 @@ async function sweepAccount(
   let backfilled = 0;
   let enqueued = 0;
 
-  for (const thread of threads.slice(0, options.maxThreads)) {
+  for (const [index, thread] of threads.slice(0, options.maxThreads).entries()) {
+    // Backfills read many threads at once; pace them so Meta's per-account
+    // read limit (code 4) never trips for the live sweep.
+    if (options.paceMs && index > 0) await new Promise((r) => setTimeout(r, options.paceMs));
     const participants = thread.participants?.data ?? [];
     const contact = participants.find((p) => p.id !== account.instagramId);
     if (!contact?.id) continue;
@@ -130,7 +137,9 @@ async function sweepAccount(
       } catch (error: unknown) {
         if (!isUniqueViolation(error)) throw error;
         // Mirror already has it. Repair rows stored before rich mirroring
-        // ("[media]" placeholders) while Meta still returns their content.
+        // ("[media]" placeholders) while Meta still returns their content;
+        // a bare is_unsupported read knows less than the placeholder does.
+        if (isGraphUnsupportedOnly(message)) continue;
         const repaired = await prisma.dmMessage.updateMany({
           where: { mid, text: "[media]" },
           data: { text, kind: normalized.kind, ...(attachments ? { attachments } : {}) },
@@ -258,7 +267,7 @@ export async function backfillMirror(maxThreads = 50): Promise<SweepStats> {
   });
   const stats: SweepStats = { accounts: accounts.length, backfilled: 0, enqueued: 0 };
   for (const account of accounts) {
-    const result = await sweepAccount(account, { maxThreads, enqueue: false });
+    const result = await sweepAccount(account, { maxThreads, enqueue: false, paceMs: 2_000 });
     stats.backfilled += result.backfilled;
   }
   return stats;

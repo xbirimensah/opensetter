@@ -20,7 +20,9 @@ export function isMetaCdnUrl(raw: string): boolean {
     return (
       host === "lookaside.fbsbx.com" ||
       host.endsWith(".fbcdn.net") ||
-      host.endsWith(".cdninstagram.com")
+      host.endsWith(".cdninstagram.com") ||
+      // GIFs from Instagram's picker arrive as image attachments on Giphy.
+      /^media\d*\.giphy\.com$/.test(host)
     );
   } catch {
     return false;
