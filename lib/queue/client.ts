@@ -6,6 +6,7 @@
 
 import { Queue } from "bullmq";
 import Redis from "ioredis";
+import type { DmAttachment, DmMessageKind } from "@/lib/meta/attachments";
 
 let connection: Redis | null = null;
 
@@ -42,6 +43,9 @@ export interface ProcessPostbackJob {
   payload: string;
   mid?: string;
   fallback?: boolean;
+  /** Tapped button label, mirrored into the inbox. */
+  title?: string;
+  timestamp?: number;
 }
 
 // One Instagram DM message event (inbound or echo) for the AI setter
@@ -53,6 +57,36 @@ export interface ProcessInboundDmJob {
   text: string;
   isEcho: boolean;
   /** Meta event timestamp in ms; falls back to enqueue time. */
+  timestamp?: number;
+  /** What the person typed, without media summaries (flows match on it). */
+  rawText?: string;
+  /** Rich content (absent on jobs queued before rich mirroring). */
+  kind?: DmMessageKind;
+  attachments?: DmAttachment[];
+  replyToMid?: string;
+  quickReplyPayload?: string;
+  referralRef?: string;
+  /**
+   * The DM reconciler already wrote this message to the mirror. The job
+   * then skips the insert (whose duplicate key would otherwise end it)
+   * and goes straight to flows and the setter.
+   */
+  mirrored?: boolean;
+  /** Re-runs after the flow lock was busy (bounded). */
+  flowRetry?: number;
+}
+
+// A flow run parked on a delay step: continue at `nodeId` when it fires.
+export interface ProcessFlowResumeJob {
+  runId: string;
+  nodeId: string;
+}
+
+// A user opened the chat through an ig.me ref link (no message yet).
+export interface ProcessReferralJob {
+  instagramAccountId: string;
+  userId: string;
+  ref: string;
   timestamp?: number;
 }
 
@@ -68,11 +102,15 @@ export type DmQueueJob =
   | ProcessCommentJob
   | ProcessPostbackJob
   | ProcessInboundDmJob
-  | ProcessWindowNudgeJob;
+  | ProcessWindowNudgeJob
+  | ProcessFlowResumeJob
+  | ProcessReferralJob;
 
 export const POSTBACK_JOB_NAME = "process-postback";
 export const INBOUND_DM_JOB_NAME = "process-inbound-dm";
 export const WINDOW_NUDGE_JOB_NAME = "process-window-nudge";
+export const FLOW_RESUME_JOB_NAME = "process-flow-resume";
+export const REFERRAL_JOB_NAME = "process-referral";
 
 let dmQueue: Queue<DmQueueJob> | null = null;
 

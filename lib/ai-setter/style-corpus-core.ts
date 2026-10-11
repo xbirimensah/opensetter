@@ -4,6 +4,7 @@
  * access lives in style-corpus.ts.
  */
 
+import { isMediaOnly } from "@/lib/meta/attachments";
 import type {
   DmMessageDirection,
   DmMessageSource,
@@ -51,6 +52,8 @@ export interface MirroredMessage {
   direction: DmMessageDirection;
   source: DmMessageSource;
   text: string;
+  /** Message kind; media and cards never become style examples. */
+  kind?: string | null;
   sentAt: Date;
 }
 
@@ -80,7 +83,7 @@ export function buildCorpusEntries(
   const candidates: CorpusEntryDraft[] = [];
   for (const message of messages) {
     if (message.direction !== "OUT") continue;
-    if (message.text === "[media]") continue;
+    if (isMediaOnly(message)) continue;
     if (isAgentAuthored(message, footprint)) continue;
 
     const redacted = redactCorpusText(message.text);

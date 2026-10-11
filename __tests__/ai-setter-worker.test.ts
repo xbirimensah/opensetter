@@ -14,18 +14,28 @@ const mocks = vi.hoisted(() => ({
   prisma: {
     instagramAccount: { findUnique: vi.fn() },
     dmConversation: { upsert: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
-    dmMessage: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
+    dmMessage: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      count: vi.fn().mockResolvedValue(3),
+    },
     aiReplyLog: {
       create: vi.fn(),
       update: vi.fn(),
       findUnique: vi.fn(),
     },
+    dmLog: { findFirst: vi.fn().mockResolvedValue(null) },
+    flowRun: { findFirst: vi.fn().mockResolvedValue(null) },
   },
   generateSetterDraft: vi.fn(),
   generateWindowNudge: vi.fn(),
   sendAiReply: vi.fn(),
   scheduleWindowNudge: vi.fn().mockResolvedValue(undefined),
   loadVoiceContext: vi.fn(),
+  handleInboundForFlows: vi.fn().mockResolvedValue({ consumed: false }),
+  captureMessageMedia: vi.fn().mockResolvedValue(0),
 }));
 
 vi.mock("@/lib/db/client", () => ({ prisma: mocks.prisma }));
@@ -39,6 +49,12 @@ vi.mock("@/lib/ai-setter/voice-context", () => ({
 vi.mock("@/lib/ai-setter/send", () => ({
   sendAiReply: mocks.sendAiReply,
   scheduleWindowNudge: mocks.scheduleWindowNudge,
+}));
+vi.mock("@/lib/flows/service", () => ({
+  handleInboundForFlows: mocks.handleInboundForFlows,
+}));
+vi.mock("@/lib/media/inbound", () => ({
+  captureMessageMedia: mocks.captureMessageMedia,
 }));
 
 import { processInboundDm } from "../lib/queue/ai-setter-worker";

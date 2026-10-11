@@ -1,16 +1,27 @@
 import { Worker, type Job } from "bullmq";
 import {
+  FLOW_RESUME_JOB_NAME,
   getDMQueue,
   getRedisConnection,
   INBOUND_DM_JOB_NAME,
   POSTBACK_JOB_NAME,
+  REFERRAL_JOB_NAME,
   WINDOW_NUDGE_JOB_NAME,
   type DmQueueJob,
   type ProcessCommentJob,
+  type ProcessFlowResumeJob,
   type ProcessInboundDmJob,
   type ProcessPostbackJob,
+  type ProcessReferralJob,
   type ProcessWindowNudgeJob,
 } from "./client";
+import {
+  handlePostbackForFlows,
+  handleReferralForFlows,
+  resumeFlowRun,
+  startFlowFromComment,
+} from "@/lib/flows/service";
+import { decodeFlowPayload } from "@/lib/flows/types";
 import { processInboundDm, processWindowNudge } from "./ai-setter-worker";
 import { personalizeCampaignOpener } from "@/lib/ai-setter/campaign-opener";
 import { prisma } from "@/lib/db/client";
@@ -394,6 +405,55 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
       }
     }
 
+    // Flow campaigns: the comment starts a flow, whose first message goes
+    // out as the private reply. Dedupe, quota, rate limit and the public
+    // reply above all still apply.
+    if (automation.flowId) {
+      try {
+        const run = await startFlowFromComment({
+          account: {
+            id: automation.instagramAccount.id,
+            instagramId: automation.instagramAccount.instagramId,
+            workspaceId: automation.workspaceId,
+            accessToken: automation.instagramAccount.accessToken,
+          },
+          flowId: automation.flowId,
+          automationId: automation.id,
+          commentId,
+          commentText,
+          commenterId,
+          commenterName,
+          matchedKeyword: matchResult.matchedKeyword,
+        });
+        if (run.sends === 0 && run.status !== "WAITING") {
+          // The flow ended without messaging (e.g. a condition path with no
+          // message): give the reserved DM credit back.
+          await releaseWorkspaceDMReservation(automation.workspaceId, usage.periodStart);
+          await prisma.dmLog.update({
+            where: { automationId_commentId: { automationId: automation.id, commentId } },
+            data: { status: "SKIPPED_NO_MATCH", errorMessage: "Flow ended without sending a message" },
+          });
+          continue;
+        }
+        await prisma.dmLog.update({
+          where: { automationId_commentId: { automationId: automation.id, commentId } },
+          data: { status: "SENT", dmSentAt: new Date(), errorMessage: null },
+        });
+      } catch (error) {
+        await releaseWorkspaceDMReservation(automation.workspaceId, usage.periodStart);
+        await prisma.dmLog.update({
+          where: { automationId_commentId: { automationId: automation.id, commentId } },
+          data: {
+            status: "FAILED",
+            attempts: job.attemptsMade + 1,
+            errorMessage: formatError(error),
+          },
+        });
+        throw error;
+      }
+      continue;
+    }
+
     // With an opening DM, the private reply is a button message; tapping it
     // fires a postback that delivers the reveal (see processPostback). Without
     // one, we send the reveal text directly as today.
@@ -562,8 +622,63 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
  * The postback payload is `reveal:<automationId>`; the sender is the user's
  * IGSID (same id as their comment author id), which we DM directly.
  */
+/**
+ * Mirror a button tap into the inbox (it opens the 24h window like a
+ * message) and return the conversation, or null for unknown accounts.
+ */
+async function mirrorPostback(data: ProcessPostbackJob) {
+  const account = await prisma.instagramAccount.findUnique({
+    where: { instagramId: data.instagramAccountId },
+    select: { id: true, instagramId: true, workspaceId: true, accessToken: true },
+  });
+  if (!account) return null;
+  const sentAt = data.timestamp ? new Date(data.timestamp) : new Date();
+  const conversation = await prisma.dmConversation.upsert({
+    where: {
+      instagramAccountId_participantId: {
+        instagramAccountId: account.id,
+        participantId: data.userId,
+      },
+    },
+    create: { instagramAccountId: account.id, participantId: data.userId, lastInboundAt: sentAt },
+    update: { lastInboundAt: sentAt },
+  });
+  if (data.title) {
+    await prisma.dmMessage
+      .create({
+        data: {
+          conversationId: conversation.id,
+          mid: data.mid ?? `postback_${data.userId}_${sentAt.getTime()}`,
+          direction: "IN",
+          source: "PARTICIPANT",
+          kind: "postback",
+          text: data.title,
+          sentAt,
+        },
+      })
+      .catch(() => {
+        // Redelivered tap: already mirrored.
+      });
+  }
+  return { account, conversation };
+}
+
 async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   const { instagramAccountId, userId, payload, fallback } = job.data;
+
+  // Real taps (not the read-receipt fallback) are mirrored and may belong
+  // to a flow; flow payloads never reach the legacy reveal below.
+  if (!fallback) {
+    const mirrored = await mirrorPostback(job.data);
+    if (mirrored && decodeFlowPayload(payload)) {
+      await handlePostbackForFlows({
+        account: mirrored.account,
+        conversationId: mirrored.conversation.id,
+        payload,
+      });
+      return;
+    }
+  }
 
   const isFollowCheck = payload.startsWith("followcheck:");
   if (!isFollowCheck && !payload.startsWith("reveal:")) return;
@@ -792,9 +907,35 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   }
 }
 
+async function processReferral(job: Job<ProcessReferralJob>): Promise<void> {
+  const { instagramAccountId, userId, ref, timestamp } = job.data;
+  const account = await prisma.instagramAccount.findUnique({
+    where: { instagramId: instagramAccountId },
+    select: { id: true, instagramId: true, workspaceId: true, accessToken: true },
+  });
+  if (!account) return;
+  const sentAt = timestamp ? new Date(timestamp) : new Date();
+  // Opening a ref link counts as the user starting the conversation.
+  const conversation = await prisma.dmConversation.upsert({
+    where: {
+      instagramAccountId_participantId: { instagramAccountId: account.id, participantId: userId },
+    },
+    create: { instagramAccountId: account.id, participantId: userId, lastInboundAt: sentAt },
+    update: { lastInboundAt: sentAt },
+  });
+  await handleReferralForFlows({ account, conversationId: conversation.id, ref });
+}
+
 async function processJob(job: Job<DmQueueJob>): Promise<void> {
   if (job.name === POSTBACK_JOB_NAME) {
     return processPostback(job as Job<ProcessPostbackJob>);
+  }
+  if (job.name === FLOW_RESUME_JOB_NAME) {
+    const { runId, nodeId } = (job as Job<ProcessFlowResumeJob>).data;
+    return resumeFlowRun(runId, nodeId);
+  }
+  if (job.name === REFERRAL_JOB_NAME) {
+    return processReferral(job as Job<ProcessReferralJob>);
   }
   if (job.name === INBOUND_DM_JOB_NAME) {
     return processInboundDm(job as Job<ProcessInboundDmJob>);

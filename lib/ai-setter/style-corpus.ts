@@ -176,6 +176,7 @@ export async function rebuildStyleCorpus(
         direction: true,
         source: true,
         text: true,
+        kind: true,
         sentAt: true,
         conversation: { select: { participantId: true } },
       },
@@ -192,6 +193,7 @@ export async function rebuildStyleCorpus(
     direction: row.direction,
     source: row.source,
     text: row.text,
+    kind: row.kind,
     sentAt: row.sentAt,
   }));
   const entries = buildCorpusEntries(messages, footprint);

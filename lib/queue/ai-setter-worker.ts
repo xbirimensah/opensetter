@@ -16,6 +16,7 @@ import type {
   DmConversation,
 } from "@/app/generated/prisma/client";
 import type { ProcessInboundDmJob, ProcessWindowNudgeJob } from "./client";
+import { INBOUND_DM_JOB_NAME, getDMQueue } from "./client";
 import { generateSetterDraft, generateWindowNudge } from "@/lib/ai-setter/generate";
 import { scheduleWindowNudge } from "@/lib/ai-setter/send";
 import {
@@ -31,6 +32,8 @@ import {
   resolveChatLanguage,
   type ChatLanguage,
 } from "@/lib/ai-setter/language";
+import { captureMessageMedia } from "@/lib/media/inbound";
+import { handleInboundForFlows } from "@/lib/flows/service";
 
 // The setter reads the whole thread with this user; each message is
 // truncated when rendered, so even long threads stay prompt-sized. The
@@ -39,6 +42,9 @@ const HISTORY_LIMIT = 400;
 /** After a human replies manually, the setter stays out this long. */
 const HUMAN_TAKEOVER_PAUSE_MS = 6 * 60 * 60 * 1000;
 const WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Re-runs of one DM through flows while the conversation is busy. */
+const FLOW_RETRY_LIMIT = 3;
+const FLOW_RETRY_DELAY_MS = 5_000;
 /** Never nudge closer than this to the window actually closing. */
 const WINDOW_CLOSE_MARGIN_MS = 30 * 60 * 1000;
 
@@ -74,6 +80,28 @@ async function recordSkip(
     .catch((error: unknown) => {
       if (!isUniqueViolation(error)) throw error;
     });
+}
+
+/**
+ * A brand-new contact for "welcome" flows: nothing mirrored before this
+ * message, nothing ever sent to them (legacy campaign sends are not
+ * mirrored, so DmLog and lastOutboundAt count too), and no earlier flow.
+ */
+async function isFirstContact(
+  conversation: DmConversation,
+  accountRecordId: string,
+  mirroredId: string
+): Promise<boolean> {
+  if (conversation.lastOutboundAt) return false;
+  const [earlierMessages, campaignLog, flowRun] = await Promise.all([
+    prisma.dmMessage.count({ where: { conversationId: conversation.id, id: { not: mirroredId } } }),
+    prisma.dmLog.findFirst({
+      where: { instagramAccountId: accountRecordId, commenterId: conversation.participantId },
+      select: { id: true },
+    }),
+    prisma.flowRun.findFirst({ where: { conversationId: conversation.id }, select: { id: true } }),
+  ]);
+  return earlierMessages === 0 && !campaignLog && !flowRun;
 }
 
 async function loadHistory(conversationId: string) {
@@ -275,6 +303,13 @@ export async function processWindowNudge(
   const effectiveMode = conversation.modeOverride ?? config.mode;
   if (effectiveMode === "OFF") return;
   if (!conversation.aiEnabled) return;
+  // A flow is mid-conversation (waiting for an answer, a tap or a delay):
+  // a setter nudge would talk over it.
+  const activeFlow = await prisma.flowRun.findFirst({
+    where: { conversationId, status: { in: ["RUNNING", "WAITING"] } },
+    select: { id: true },
+  });
+  if (activeFlow) return;
 
   // The prospect replied since this was scheduled: the newer window has
   // its own job, this one is stale.
@@ -391,6 +426,8 @@ export async function processInboundDm(
 ): Promise<void> {
   const { instagramAccountId, participantId, mid, text, isEcho, timestamp } =
     job.data;
+  const kind = job.data.kind ?? "text";
+  const attachments = job.data.attachments ?? [];
 
   const account = await prisma.instagramAccount.findUnique({
     where: { instagramId: instagramAccountId },
@@ -417,20 +454,47 @@ export async function processInboundDm(
 
   // Mirror the message. The unique mid makes webhook redelivery and
   // echoes of our own API sends (already recorded at send time) no-ops.
-  try {
-    await prisma.dmMessage.create({
-      data: {
-        conversationId: conversation.id,
-        mid,
-        direction: isEcho ? "OUT" : "IN",
-        source: isEcho ? "HUMAN" : "PARTICIPANT",
-        text,
-        sentAt,
-      },
+  async function mirrorMessage(): Promise<string | null> {
+    try {
+      const created = await prisma.dmMessage.create({
+        data: {
+          conversationId: conversation.id,
+          mid,
+          direction: isEcho ? "OUT" : "IN",
+          source: isEcho ? "HUMAN" : "PARTICIPANT",
+          text,
+          kind,
+          ...(attachments.length > 0
+            ? { attachments: attachments as unknown as Prisma.InputJsonValue }
+            : {}),
+          replyToMid: job.data.replyToMid ?? null,
+          sentAt,
+        },
+        select: { id: true },
+      });
+      return created.id;
+    } catch (error: unknown) {
+      if (isUniqueViolation(error)) return null;
+      throw error;
+    }
+  }
+
+  const alreadyMirrored = job.data.mirrored
+    ? await prisma.dmMessage.findUnique({ where: { mid }, select: { id: true } })
+    : null;
+  const mirroredId = alreadyMirrored?.id ?? (await mirrorMessage());
+  if (!mirroredId) return;
+
+  // Keep our own copy of voice notes, photos and videos: Meta's CDN links
+  // expire. Best effort; a failed download leaves the CDN URL in place.
+  if (attachments.length > 0 && !alreadyMirrored) {
+    await captureMessageMedia({
+      id: mirroredId,
+      conversationId: conversation.id,
+      attachments,
+    }).catch((error: unknown) => {
+      console.error("[AI Setter] Media capture failed:", error);
     });
-  } catch (error: unknown) {
-    if (isUniqueViolation(error)) return;
-    throw error;
   }
 
   const config = account.aiSetterConfig;
@@ -455,8 +519,62 @@ export async function processInboundDm(
     config ?? null
   ).catch(() => {});
 
-  // ── Gate chain ──────────────────────────────────────────────────────────
+  // ── Flows ───────────────────────────────────────────────────────────────
+  // Flows go first: an answer to an input step, a first reply after a
+  // comment flow's private reply, a quick-reply tap or a DM keyword belongs
+  // to the flow, and the setter must not answer it a second time.
   const effectiveMode = conversation.modeOverride ?? config?.mode ?? "OFF";
+  const aiActive = Boolean(config && effectiveMode !== "OFF" && conversation.aiEnabled);
+  const humanActive = Boolean(
+    config?.pauseOnHumanReply &&
+      conversation.humanTakeoverAt &&
+      Date.now() - conversation.humanTakeoverAt.getTime() < HUMAN_TAKEOVER_PAUSE_MS
+  );
+  const flowResult = await handleInboundForFlows({
+    account: {
+      id: account.id,
+      instagramId: account.instagramId,
+      workspaceId: account.workspaceId,
+      accessToken: account.accessToken,
+    },
+    conversationId: conversation.id,
+    // Flows match what the person typed, never the "[Photo]" style summary.
+    text: job.data.rawText ?? (kind === "text" || kind === "quick_reply" ? text : ""),
+    kind,
+    quickReplyPayload: job.data.quickReplyPayload,
+    referralRef: job.data.referralRef,
+    isNewContact: await isFirstContact(conversation, account.id, mirroredId),
+    aiActive,
+    humanActive,
+  }).catch((error: unknown) => {
+    // Unexpected failure before any flow claimed the message: the setter
+    // may still answer it.
+    console.error("[Flows] Inbound handling failed:", error);
+    return { consumed: false, retry: false };
+  });
+  if (flowResult.retry) {
+    // The flow is mid-pass for this contact. Re-run this DM through flows
+    // shortly instead of letting the setter answer it.
+    const attempt = (job.data.flowRetry ?? 0) + 1;
+    if (attempt <= FLOW_RETRY_LIMIT) {
+      await getDMQueue().add(
+        INBOUND_DM_JOB_NAME,
+        { ...job.data, mirrored: true, flowRetry: attempt },
+        { delay: FLOW_RETRY_DELAY_MS * attempt, jobId: `dm_${mid.replace(/[^a-zA-Z0-9_-]/g, "_")}_flow${attempt}` }
+      );
+    } else {
+      console.error(`[Flows] Gave up on ${mid} after ${FLOW_RETRY_LIMIT} busy retries`);
+    }
+    return;
+  }
+  if (flowResult.consumed) {
+    if (config) {
+      await recordSkip(conversation, account.id, mid, text, ["handled by a flow"]);
+    }
+    return;
+  }
+
+  // ── Gate chain ──────────────────────────────────────────────────────────
   if (!config || effectiveMode === "OFF") return;
   if (!conversation.aiEnabled) return;
   if (config.blockedUserIds.includes(participantId)) return;

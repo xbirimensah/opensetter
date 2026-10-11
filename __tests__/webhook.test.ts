@@ -363,11 +363,13 @@ describe("parseMessageEvents", () => {
 
     const events = parseMessageEvents(payload);
     expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({
+    expect(events[0]).toMatchObject({
       instagramAccountId: "ig_456",
       participantId: "user_1",
       mid: "mid_abc",
       text: "hey, how does this work?",
+      kind: "text",
+      attachments: [],
       isEcho: false,
       timestamp: 1770000000000,
     });
@@ -397,7 +399,7 @@ describe("parseMessageEvents", () => {
     expect(events[0].participantId).toBe("user_1");
   });
 
-  it("should use a media placeholder for attachment-only messages", () => {
+  it("should summarize attachment-only messages instead of a bare placeholder", () => {
     const payload = {
       object: "instagram",
       entry: [
@@ -417,7 +419,8 @@ describe("parseMessageEvents", () => {
 
     const events = parseMessageEvents(payload);
     expect(events).toHaveLength(1);
-    expect(events[0].text).toBe("[media]");
+    expect(events[0].text).toBe("[Photo]");
+    expect(events[0].kind).toBe("image");
   });
 
   it("should skip events without a mid or without any content", () => {

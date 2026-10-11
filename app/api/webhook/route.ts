@@ -4,14 +4,34 @@ import { getDMQueue } from "@/lib/queue/client";
 import {
   parseCommentEvents,
   parseMessageEvents,
+  parseMessageUpdates,
   parsePostbackEvents,
   parseReadEvents,
+  parseReferralEvents,
   verifyWebhookSignature,
 } from "@/lib/meta/webhook";
-import { INBOUND_DM_JOB_NAME, POSTBACK_JOB_NAME } from "@/lib/queue/client";
+import {
+  INBOUND_DM_JOB_NAME,
+  POSTBACK_JOB_NAME,
+  REFERRAL_JOB_NAME,
+} from "@/lib/queue/client";
+import { applyMessageUpdates } from "@/lib/meta/message-updates";
+import { hasBlockingFlowRun } from "@/lib/flows/service";
 import { Prisma } from "@/app/generated/prisma/client";
 
 const OPENING_DM_READ_FALLBACK_DELAY_MS = 5 * 60 * 1000;
+const ECHO_DELAY_SECONDS = 5;
+
+/** True when a flow waits for this contact's next message (input or first reply). */
+async function flowIsWaiting(accountRecordId: string, participantId: string): Promise<boolean> {
+  const conversation = await prisma.dmConversation.findUnique({
+    where: {
+      instagramAccountId_participantId: { instagramAccountId: accountRecordId, participantId },
+    },
+    select: { id: true },
+  });
+  return conversation ? hasBlockingFlowRun(conversation.id).catch(() => false) : false;
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -127,14 +147,18 @@ export async function POST(request: NextRequest) {
       const account = await prisma.instagramAccount.findUnique({
         where: { instagramId: event.instagramAccountId },
         select: {
+          id: true,
           workspaceId: true,
           aiSetterConfig: { select: { replyDelaySeconds: true } },
         },
       });
       if (!account) continue;
 
+      // Echoes wait a few seconds so the send-time mirror of our own API
+      // sends (AI setter, flows) lands first; otherwise the echo would be
+      // recorded as a human reply and pause the setter.
       const delaySeconds = event.isEcho
-        ? 0
+        ? ECHO_DELAY_SECONDS
         : account.aiSetterConfig?.replyDelaySeconds ?? 10;
 
       await queue.add(
@@ -144,11 +168,22 @@ export async function POST(request: NextRequest) {
           participantId: event.participantId,
           mid: event.mid,
           text: event.text,
+          rawText: event.rawText,
           isEcho: event.isEcho,
           timestamp: event.timestamp,
+          kind: event.kind,
+          attachments: event.attachments,
+          replyToMid: event.replyToMid,
+          quickReplyPayload: event.quickReplyPayload,
+          referralRef: event.referralRef,
         },
         {
-          delay: delaySeconds * 1000,
+          // Quick-reply taps and answers to a waiting flow skip the debounce.
+          delay: event.isEcho
+            ? delaySeconds * 1000
+            : event.quickReplyPayload || (await flowIsWaiting(account.id, event.participantId))
+              ? 0
+              : delaySeconds * 1000,
           // BullMQ forbids ":" in custom job ids and Meta mids are not
           // charset-guaranteed, so sanitize defensively.
           jobId: `dm_${event.mid.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
@@ -174,6 +209,8 @@ export async function POST(request: NextRequest) {
           userId: event.userId,
           payload: event.payload,
           mid: event.mid,
+          title: event.title,
+          timestamp: event.timestamp,
         },
         {
           // BullMQ forbids ":" in custom job ids, and the payload is
@@ -181,6 +218,33 @@ export async function POST(request: NextRequest) {
           jobId: `postback_${event.instagramAccountId}_${event.userId}_${(
             event.mid ?? event.payload
           ).replace(/:/g, "_")}`,
+        }
+      );
+    }
+
+    // Reactions, edits and deletions change mirrored rows in place.
+    await applyMessageUpdates(
+      parseMessageUpdates(payload as Parameters<typeof parseMessageUpdates>[0])
+    );
+
+    // ig.me ref links. A referral riding on a message is handled with that
+    // message; a standalone one (first-time contact) gets its own job.
+    const referralEvents = parseReferralEvents(
+      payload as Parameters<typeof parseReferralEvents>[0]
+    );
+    const messageSenders = new Set(messageEvents.map((e) => e.participantId));
+    for (const event of referralEvents) {
+      if (messageSenders.has(event.userId)) continue;
+      await queue.add(
+        REFERRAL_JOB_NAME,
+        {
+          instagramAccountId: event.instagramAccountId,
+          userId: event.userId,
+          ref: event.ref,
+          timestamp: event.timestamp,
+        },
+        {
+          jobId: `referral_${event.instagramAccountId}_${event.userId}_${event.timestamp ?? Date.now()}`,
         }
       );
     }

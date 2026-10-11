@@ -20,7 +20,7 @@ export interface DraftReply {
 
 export interface ConversationMessage {
   direction: "IN" | "OUT";
-  source: "PARTICIPANT" | "HUMAN" | "AI" | "CAMPAIGN";
+  source: "PARTICIPANT" | "HUMAN" | "AI" | "CAMPAIGN" | "FLOW";
   text: string;
   sentAt: Date;
 }

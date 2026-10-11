@@ -1,4 +1,9 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import {
+  normalizeWebhookMessage,
+  type DmAttachment,
+  type DmMessageKind,
+} from "@/lib/meta/attachments";
 
 export function verifyWebhookSignature(
   payload: string,
@@ -65,12 +70,20 @@ interface WebhookEntry {
     recipient?: { id?: string };
     timestamp?: number;
     postback?: { mid?: string; title?: string; payload?: string };
-    read?: { watermark?: number; seq?: number };
+    read?: { watermark?: number; seq?: number; mid?: string };
+    reaction?: { mid?: string; action?: string; emoji?: string; reaction?: string };
+    message_edit?: { mid?: string; text?: string; num_edit?: number };
+    referral?: { ref?: string; source?: string; type?: string };
     message?: {
       mid?: string;
       text?: string;
       is_echo?: boolean;
-      attachments?: Array<{ type?: string }>;
+      is_deleted?: boolean;
+      is_unsupported?: boolean;
+      attachments?: Array<{ type?: string; payload?: Record<string, unknown> }>;
+      reply_to?: Record<string, unknown>;
+      quick_reply?: { payload?: string };
+      referral?: { ref?: string; source?: string; type?: string };
     };
   }>;
 }
@@ -80,7 +93,16 @@ export interface WebhookMessageEvent {
   /** IGSID of the other participant, regardless of direction. */
   participantId: string;
   mid: string;
+  /** Readable text; a summary like "[Voice message]" for media. */
   text: string;
+  /** Exactly what the person typed (empty for media); flows match on this. */
+  rawText?: string;
+  kind?: DmMessageKind;
+  attachments?: DmAttachment[];
+  replyToMid?: string;
+  quickReplyPayload?: string;
+  /** ig.me ref parameter, when the message arrived through a ref link. */
+  referralRef?: string;
   /**
    * True when this is an echo of a message the account itself sent
    * (via the IG app, the dashboard, or an API send).
@@ -95,6 +117,23 @@ export interface WebhookPostbackEvent {
   userId: string;
   payload: string;
   mid?: string;
+  /** Button label the user tapped; mirrored into the inbox. */
+  title?: string;
+  timestamp?: number;
+}
+
+/** In-place changes to an already mirrored message. */
+export type WebhookMessageUpdate =
+  | { type: "reaction"; instagramAccountId: string; mid: string; emoji: string | null }
+  | { type: "edit"; instagramAccountId: string; mid: string; text: string }
+  | { type: "delete"; instagramAccountId: string; mid: string };
+
+/** A user opened the chat through an ig.me/m/<handle>?ref=<ref> link. */
+export interface WebhookReferralEvent {
+  instagramAccountId: string;
+  userId: string;
+  ref: string;
+  timestamp?: number;
 }
 
 export interface WebhookReadEvent {
@@ -174,15 +213,27 @@ export function parseMessageEvents(payload: WebhookPayload): WebhookMessageEvent
       // A self-thread cannot happen in a real DM; drop malformed events.
       if (!participantId || participantId === accountId) continue;
 
-      const text = message.text?.trim() ?? "";
-      const hasAttachments = (message.attachments?.length ?? 0) > 0;
-      if (!text && !hasAttachments) continue;
+      // Deletions update the mirrored row in place (parseMessageUpdates).
+      if (message.is_deleted) continue;
+      const hasContent =
+        Boolean(message.text?.trim()) ||
+        (message.attachments?.length ?? 0) > 0 ||
+        Boolean(message.reply_to) ||
+        message.is_unsupported === true;
+      if (!hasContent) continue;
 
+      const normalized = normalizeWebhookMessage(message);
       events.push({
         instagramAccountId: accountId,
         participantId,
         mid: message.mid,
-        text: text || "[media]",
+        text: normalized.text,
+        rawText: message.text?.trim() ?? "",
+        kind: normalized.kind,
+        attachments: normalized.attachments,
+        replyToMid: normalized.replyToMid,
+        quickReplyPayload: normalized.quickReplyPayload,
+        referralRef: message.referral?.ref,
         isEcho,
         timestamp: messaging.timestamp,
       });
@@ -218,6 +269,8 @@ export function parsePostbackEvents(
         userId,
         payload: postbackPayload,
         mid: messaging.postback?.mid,
+        title: messaging.postback?.title,
+        timestamp: messaging.timestamp,
       });
     }
   }
@@ -253,5 +306,59 @@ export function parseReadEvents(payload: WebhookPayload): WebhookReadEvent[] {
     }
   }
 
+  return events;
+}
+
+/**
+ * Reactions, edits and deletions of messages we already mirrored. They
+ * change a row in place instead of adding a message.
+ */
+export function parseMessageUpdates(payload: WebhookPayload): WebhookMessageUpdate[] {
+  const updates: WebhookMessageUpdate[] = [];
+  if (payload.object !== "instagram") return updates;
+
+  for (const entry of payload.entry ?? []) {
+    const accountId = entry.id;
+    if (!accountId) continue;
+    for (const messaging of entry.messaging ?? []) {
+      const reaction = messaging.reaction;
+      if (reaction?.mid) {
+        updates.push({
+          type: "reaction",
+          instagramAccountId: accountId,
+          mid: reaction.mid,
+          emoji: reaction.action === "unreact" ? null : reaction.emoji ?? "\u2764",
+        });
+      }
+      const edit = messaging.message_edit;
+      if (edit?.mid && typeof edit.text === "string") {
+        updates.push({ type: "edit", instagramAccountId: accountId, mid: edit.mid, text: edit.text });
+      }
+      if (messaging.message?.mid && messaging.message.is_deleted) {
+        updates.push({ type: "delete", instagramAccountId: accountId, mid: messaging.message.mid });
+      }
+    }
+  }
+  return updates;
+}
+
+/**
+ * ig.me ref-link opens. A first-time contact arrives as a standalone
+ * `referral` event; an existing thread may carry it on the message.
+ */
+export function parseReferralEvents(payload: WebhookPayload): WebhookReferralEvent[] {
+  const events: WebhookReferralEvent[] = [];
+  if (payload.object !== "instagram") return events;
+
+  for (const entry of payload.entry ?? []) {
+    const accountId = entry.id;
+    for (const messaging of entry.messaging ?? []) {
+      const ref = messaging.referral?.ref ?? messaging.message?.referral?.ref;
+      const userId = messaging.sender?.id;
+      if (!accountId || !ref || !userId || userId === accountId) continue;
+      if (messaging.message?.is_echo) continue;
+      events.push({ instagramAccountId: accountId, userId, ref, timestamp: messaging.timestamp });
+    }
+  }
   return events;
 }

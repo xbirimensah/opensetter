@@ -396,6 +396,57 @@ export async function sendDirectMessageWithLinkButton(
   return handleResponse(response);
 }
 
+export type MessageRecipient = { id: string } | { comment_id: string };
+
+/**
+ * Send any Instagram Messaging API message body (text, quick replies,
+ * button/generic templates, image/video/audio/file attachments) to a user
+ * or, for a comment's private reply, to `{ comment_id }`. Flows build the
+ * body; this only transports it.
+ */
+export async function sendMessage(
+  accessToken: string,
+  instagramAccountId: string,
+  recipient: MessageRecipient,
+  message: Record<string, unknown>
+): Promise<{ recipient_id?: string; message_id: string }> {
+  const response = await fetch(
+    `${instagramGraphBase()}/${instagramAccountId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ recipient, message }),
+    }
+  );
+
+  return handleResponse(response);
+}
+
+/** Basic profile of a user in an active conversation (name, username). */
+export async function getMessagingUserProfile(
+  accessToken: string,
+  igsid: string
+): Promise<{ name?: string; username?: string } | null> {
+  const url = new URL(`${instagramGraphBase()}/${igsid}`);
+  url.searchParams.set("fields", "name,username");
+  try {
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return {
+      name: typeof data?.name === "string" ? data.name : undefined,
+      username: typeof data?.username === "string" ? data.username : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function sendCommentReply(
   accessToken: string,
   commentId: string,
@@ -490,6 +541,11 @@ export interface InstagramMessage {
   message?: string;
   from?: InstagramParticipant;
   to?: { data: InstagramParticipant[] };
+  /** Raw rich content; normalize with lib/meta/attachments.ts. */
+  attachments?: { data?: unknown[] };
+  shares?: { data?: unknown[] };
+  story?: unknown;
+  is_unsupported?: boolean;
 }
 
 export interface InstagramConversation {
@@ -523,6 +579,14 @@ export async function getConversations(
 }
 
 /**
+ * Message fields for conversation reads. Includes attachments (photos,
+ * videos, voice notes, files, generic-template cards), shares and story
+ * replies/mentions so the mirror never stores a bare "[media]" again.
+ */
+export const CONVERSATION_MESSAGE_FIELDS =
+  "id,created_time,from,to,message,attachments,shares,story,is_unsupported";
+
+/**
  * The messages in a conversation, with content. Meta only returns full details
  * for the 20 most recent messages, newest first.
  */
@@ -531,7 +595,7 @@ export async function getConversationMessages(
   conversationId: string
 ): Promise<InstagramMessage[]> {
   const url = new URL(`${instagramGraphBase()}/${conversationId}`);
-  url.searchParams.set("fields", "messages{id,created_time,from,to,message}");
+  url.searchParams.set("fields", `messages{${CONVERSATION_MESSAGE_FIELDS}}`);
   url.searchParams.set("access_token", accessToken);
 
   const response = await fetch(url.toString());

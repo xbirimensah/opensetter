@@ -4,6 +4,7 @@ import { reconcileComments } from "@/lib/polling/comment-reconciler";
 import { reconcileDms } from "@/lib/polling/dm-reconciler";
 import { recoverInterruptedSends } from "@/lib/ai-setter/send";
 import { logKnowledgeHealth } from "@/lib/ai-setter/knowledge";
+import { sweepFlowRuns } from "@/lib/flows/service";
 import os from "node:os";
 
 const worker = createDMWorker();
@@ -83,11 +84,30 @@ async function pollDms() {
 setTimeout(() => void pollDms(), 20_000);
 const dmPollTimer = setInterval(() => void pollDms(), DM_POLL_INTERVAL_MS);
 
+// Flow upkeep: expire timed-out input steps and re-arm lost delay jobs.
+const FLOW_SWEEP_INTERVAL_MS = Number(process.env.FLOW_SWEEP_INTERVAL_MS ?? 60_000);
+
+async function sweepFlows() {
+  try {
+    const { expired, rearmed } = await sweepFlowRuns();
+    if (expired > 0 || rearmed > 0) {
+      console.log(`[DM Worker] Flow sweep: ${expired} expired, ${rearmed} delay(s) re-armed`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[DM Worker] Flow sweep failed:", message);
+  }
+}
+
+setTimeout(() => void sweepFlows(), 30_000);
+const flowSweepTimer = setInterval(() => void sweepFlows(), FLOW_SWEEP_INTERVAL_MS);
+
 async function shutdown(signal: string) {
   console.log(`[DM Worker] ${signal} received, closing worker`);
   clearInterval(heartbeatTimer);
   clearInterval(pollTimer);
   clearInterval(dmPollTimer);
+  clearInterval(flowSweepTimer);
   await worker.close();
   process.exit(0);
 }

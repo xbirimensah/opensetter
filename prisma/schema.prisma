@@ -18,11 +18,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts          Account[]
-  sessions          Session[]
-  ownedWorkspaces   Workspace[]       @relation("WorkspaceOwner")
-  workspaceMembers  WorkspaceMember[]
-  sentInvitations   WorkspaceInvitation[] @relation("WorkspaceInvitationsSent")
+  accounts         Account[]
+  sessions         Session[]
+  ownedWorkspaces  Workspace[]           @relation("WorkspaceOwner")
+  workspaceMembers WorkspaceMember[]
+  sentInvitations  WorkspaceInvitation[] @relation("WorkspaceInvitationsSent")
 }
 
 model Account {
@@ -75,16 +75,18 @@ model Workspace {
   usagePeriodStart  DateTime @default(now())
   dmsSentThisPeriod Int      @default(0)
 
-  members           WorkspaceMember[]
-  invitations       WorkspaceInvitation[]
-  instagramAccounts InstagramAccount[]
-  automations       Automation[]
-  dmLogs            DmLog[]
-  trackedLinks      TrackedLink[]
-  linkClicks        LinkClick[]
-  webhookEvents     WebhookEvent[]
-  operationalEvents OperationalEvent[]
+  members               WorkspaceMember[]
+  invitations           WorkspaceInvitation[]
+  instagramAccounts     InstagramAccount[]
+  automations           Automation[]
+  dmLogs                DmLog[]
+  trackedLinks          TrackedLink[]
+  linkClicks            LinkClick[]
+  webhookEvents         WebhookEvent[]
+  operationalEvents     OperationalEvent[]
   aiProviderCredentials AiProviderCredential[]
+  flows                 Flow[]
+  mediaAssets           MediaAsset[]
 
   @@index([ownerId])
 }
@@ -126,27 +128,28 @@ model WorkspaceInvitation {
 }
 
 model InstagramAccount {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   workspaceId       String
-  instagramId       String   @unique
+  instagramId       String    @unique
   username          String
   name              String?
   accessToken       String
   tokenExpiresAt    DateTime?
-  webhookSubscribed Boolean  @default(false)
-  connectedAt       DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  webhookSubscribed Boolean   @default(false)
+  connectedAt       DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  automations Automation[]
-  dmLogs      DmLog[]
-  linkClicks  LinkClick[]
-  followerSnapshots FollowerSnapshot[]
-  aiSetterConfig   AiSetterConfig?
-  dmConversations  DmConversation[]
-  aiReplyLogs      AiReplyLog[]
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automations        Automation[]
+  dmLogs             DmLog[]
+  linkClicks         LinkClick[]
+  followerSnapshots  FollowerSnapshot[]
+  aiSetterConfig     AiSetterConfig?
+  dmConversations    DmConversation[]
+  aiReplyLogs        AiReplyLog[]
   styleCorpusEntries StyleCorpusEntry[]
   voiceCorrections   VoiceCorrection[]
+  flows              Flow[]
 
   @@index([workspaceId])
 }
@@ -172,39 +175,43 @@ model FollowerSnapshot {
 }
 
 model Automation {
-  id                 String   @id @default(cuid())
+  id                 String @id @default(cuid())
   workspaceId        String
   instagramAccountId String
 
-  name           String
-  goal           String?
-  postId         String?
-  postUrl        String?
-  pendingNextReel Boolean @default(false)
-  matchAnyPost   Boolean @default(false)
-  keywords       String[]
-  matchAnyWord   Boolean @default(false)
-  dmMessage      String
-  openingDmEnabled     Boolean @default(false)
-  openingDmMessage     String?
-  openingDmButtonLabel String?
-  linkButtonLabel      String?
-  requireFollow           Boolean @default(false)
+  name                    String
+  goal                    String?
+  postId                  String?
+  postUrl                 String?
+  pendingNextReel         Boolean  @default(false)
+  matchAnyPost            Boolean  @default(false)
+  keywords                String[]
+  matchAnyWord            Boolean  @default(false)
+  dmMessage               String
+  openingDmEnabled        Boolean  @default(false)
+  openingDmMessage        String?
+  openingDmButtonLabel    String?
+  linkButtonLabel         String?
+  requireFollow           Boolean  @default(false)
   followPromptMessage     String?
   followPromptButtonLabel String?
-  followUpEnabled Boolean @default(false)
-  followUpMessage String?
-  publicReplyEnabled Boolean @default(false)
-  publicReplyMessage String?
-  publicReplyMessages String[] @default([])
-  isActive       Boolean @default(true)
-  wholeWordMatch Boolean @default(true)
+  followUpEnabled         Boolean  @default(false)
+  followUpMessage         String?
+  publicReplyEnabled      Boolean  @default(false)
+  publicReplyMessage      String?
+  publicReplyMessages     String[] @default([])
+  isActive                Boolean  @default(true)
+  wholeWordMatch          Boolean  @default(true)
   /// Rewrite the opening DM text per commenter with the AI setter's
   /// persona, referencing their actual comment. Falls back to the static
   /// text on any model failure.
-  aiPersonalizeDm Boolean @default(false)
-  reportShareSlug    String? @unique
-  reportShareEnabled Boolean @default(true)
+  aiPersonalizeDm         Boolean  @default(false)
+  /// When set, a matching comment starts this flow (ManyChat-style) instead
+  /// of the legacy opening DM / reveal pipeline.
+  flowId                  String?
+  flow                    Flow?    @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  reportShareSlug         String?  @unique
+  reportShareEnabled      Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -218,23 +225,24 @@ model Automation {
   @@index([workspaceId])
   @@index([instagramAccountId])
   @@index([postId])
+  @@index([flowId])
 }
 
 model DmLog {
-  id                 String     @id @default(cuid())
+  id                 String @id @default(cuid())
   workspaceId        String
   automationId       String
   instagramAccountId String
 
-  commenterId   String
-  commenterName String?
-  commentText   String
-  commentId     String
+  commenterId    String
+  commenterName  String?
+  commentText    String
+  commentId      String
   matchedKeyword String?
-  status        DmStatus @default(PENDING)
-  attempts      Int      @default(0)
-  dmSentAt      DateTime?
-  errorMessage  String?
+  status         DmStatus  @default(PENDING)
+  attempts       Int       @default(0)
+  dmSentAt       DateTime?
+  errorMessage   String?
 
   // The public comment reply is delivered independently of the DM, so its
   // outcome is tracked separately. publicReplySentAt makes it idempotent across
@@ -315,14 +323,14 @@ model LinkClick {
 }
 
 model WebhookEvent {
-  id          String        @id @default(cuid())
-  workspaceId String?
-  object      String?
-  payload     Json
-  status      WebhookStatus @default(PENDING)
+  id           String        @id @default(cuid())
+  workspaceId  String?
+  object       String?
+  payload      Json
+  status       WebhookStatus @default(PENDING)
   errorMessage String?
-  createdAt   DateTime      @default(now())
-  processedAt DateTime?
+  createdAt    DateTime      @default(now())
+  processedAt  DateTime?
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
@@ -331,13 +339,13 @@ model WebhookEvent {
 }
 
 model OperationalEvent {
-  id          String                @id @default(cuid())
+  id          String                 @id @default(cuid())
   workspaceId String?
   source      OperationalEventSource
-  level       OperationalEventLevel @default(INFO)
+  level       OperationalEventLevel  @default(INFO)
   message     String
   payload     Json?
-  createdAt   DateTime              @default(now())
+  createdAt   DateTime               @default(now())
   resolvedAt  DateTime?
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
@@ -356,47 +364,47 @@ model AiSetterConfig {
   mode               AiSetterMode @default(OFF)
 
   /// Who the account is: business, offer, audience — grounds every reply.
-  persona String?
+  persona     String?
   /// What the setter is driving toward (qualify, book a call, ...).
-  goal    String?
+  goal        String?
   /// Link handed out when the conversation earns it (cal.com etc.).
   bookingLink String?
   /// Force a reply language; null lets the model match the incoming message.
-  language String?
+  language    String?
 
   /// Pull facts from the connected second-brain knowledge base.
-  knowledgeEnabled Boolean @default(true)
+  knowledgeEnabled     Boolean @default(true)
   /// Pull texting-style examples from the isolated style index.
   styleExamplesEnabled Boolean @default(true)
 
   /// Below this model confidence a draft is held for review instead of sent.
-  minConfidence Float @default(0.78)
+  minConfidence      Float    @default(0.78)
   /// Wait before drafting so rapid-fire messages collapse into one reply.
-  replyDelaySeconds Int @default(10)
+  replyDelaySeconds  Int      @default(10)
   /// When the account owner replies manually, pause the AI for that thread.
-  pauseOnHumanReply Boolean @default(true)
+  pauseOnHumanReply  Boolean  @default(true)
   /// Nudge a prospect who went quiet before the 24h messaging window
   /// closes. Draft mode holds the nudge for review like any reply.
-  windowNudgeEnabled Boolean @default(false)
+  windowNudgeEnabled Boolean  @default(false)
   /// Hours after the prospect's last message before the nudge fires.
-  windowNudgeHours Int @default(20)
+  windowNudgeHours   Int      @default(20)
   /// IGSIDs the setter must never reply to.
-  blockedUserIds String[] @default([])
+  blockedUserIds     String[] @default([])
 
   /// Sprachprofil: the owner's editable voice rules. Null uses the
   /// built-in style guide.
-  voiceRules String?
+  voiceRules          String?
   /// Retrieve examples from the local style corpus (own human-typed DMs).
-  styleCorpusEnabled Boolean @default(true)
+  styleCorpusEnabled  Boolean   @default(true)
   /// Auto-send only in threads where the owner has typed at least one
   /// message by hand (the WhatsApp sidecar's strict voice rule).
-  strictVoiceEvidence Boolean @default(false)
+  strictVoiceEvidence Boolean   @default(false)
   /// When the style corpus was last rebuilt from mirrored DMs.
-  styleCorpusBuiltAt DateTime?
+  styleCorpusBuiltAt  DateTime?
   /// Model provider chosen in the UI; null keeps the env-based provider.
-  llmProvider String?
+  llmProvider         String?
   /// Model id for llmProvider; null uses the provider's saved default.
-  llmModel String?
+  llmModel            String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -408,32 +416,42 @@ model AiSetterConfig {
 /// mirror of the conversation so the setter has more history than Meta's
 /// 20-message API window, plus per-thread AI state.
 model DmConversation {
-  id                 String  @id @default(cuid())
-  instagramAccountId String
+  id                  String  @id @default(cuid())
+  instagramAccountId  String
   /// IGSID of the other participant.
   participantId       String
   participantUsername String?
 
   /// Per-thread kill switch for the AI setter.
-  aiEnabled Boolean @default(true)
+  aiEnabled       Boolean       @default(true)
   /// Per-thread mode override; null inherits the account's mode. Lets one
   /// thread run on autopilot while another holds drafts for review.
-  modeOverride AiSetterMode?
+  modeOverride    AiSetterMode?
   /// Set when a human reply is detected and pauseOnHumanReply is on.
   humanTakeoverAt DateTime?
   lastInboundAt   DateTime?
   lastOutboundAt  DateTime?
   /// When the last quiet-prospect nudge was sent (one per 24h window).
-  lastNudgeAt DateTime?
+  lastNudgeAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
-  messages         DmMessage[]
-  aiReplies        AiReplyLog[]
+  instagramAccount   InstagramAccount   @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  messages           DmMessage[]
+  aiReplies          AiReplyLog[]
   voiceCorrections   VoiceCorrection[]
   styleCorpusEntries StyleCorpusEntry[]
+  flowRuns           FlowRun[]
+
+  /// Contact profile, filled by flow input steps and actions.
+  email           String?
+  emailCapturedAt DateTime?
+  phone           String?
+  phoneCapturedAt DateTime?
+  tags            String[]  @default([])
+  /// Custom contact fields set by flows: { [name]: string | number | boolean }.
+  customFields    Json      @default("{}")
 
   @@unique([instagramAccountId, participantId])
   @@index([instagramAccountId, lastInboundAt])
@@ -443,13 +461,28 @@ model DmMessage {
   id             String             @id @default(cuid())
   conversationId String
   /// Meta message id — the idempotency key for webhook redelivery.
-  mid       String             @unique
-  direction DmMessageDirection
-  source    DmMessageSource    @default(PARTICIPANT)
-  text      String
+  mid            String             @unique
+  direction      DmMessageDirection
+  source         DmMessageSource    @default(PARTICIPANT)
+  /// Readable text. For media or cards this is a summary such as
+  /// "[Voice message]" so history, search and the AI see something useful.
+  text           String
+  /// text | image | video | audio | file | card | share | reel | post |
+  /// story_reply | story_mention | postback | quick_reply | sticker |
+  /// ephemeral | unsupported | deleted
+  kind           String             @default("text")
+  /// Normalized attachments (see lib/meta/attachments.ts).
+  attachments    Json?
+  /// mid of the message this one replies to (swipe-reply), if any.
+  replyToMid     String?
+  /// Reaction emoji the participant left on this message, if any.
+  reaction       String?
+  /// Set when Meta reports the participant edited or deleted the message.
+  editedAt       DateTime?
+  deletedAt      DateTime?
   /// Meta event timestamp (webhook delivery order is not guaranteed).
-  sentAt    DateTime
-  createdAt DateTime           @default(now())
+  sentAt         DateTime
+  createdAt      DateTime           @default(now())
 
   conversation DmConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -530,7 +563,7 @@ model AiReplyLog {
   instagramAccountId String
 
   /// mid of the inbound message this draft answers — dedup across retries.
-  inboundMid  String  @unique
+  inboundMid  String   @unique
   inboundText String
   draftText   String
   confidence  Float
@@ -620,6 +653,8 @@ enum DmMessageSource {
   AI
   /// Outbound sent by a comment-to-DM campaign.
   CAMPAIGN
+  /// Outbound sent by a flow step.
+  FLOW
 }
 
 enum VoiceCorrectionKind {
@@ -641,4 +676,154 @@ enum AiReplyStatus {
   SKIPPED
   FAILED
   DISMISSED
+}
+
+// ─── Flows (ManyChat-style automations) ───────────────────────────────────────
+
+/// A flow is a graph of steps (send message, collect input, condition,
+/// action, delay, randomizer, AI handoff). Comment triggers live on
+/// Automation.flowId; every other trigger lives in `triggers`.
+model Flow {
+  id                 String     @id @default(cuid())
+  workspaceId        String
+  instagramAccountId String
+  name               String
+  status             FlowStatus @default(DRAFT)
+  /// FlowTrigger[] (see lib/flows/types.ts): dm_keyword, story_reply,
+  /// story_mention, ref_link, welcome, new_follower.
+  triggers           Json       @default("[]")
+  /// FlowGraph: { startNodeId, nodes }.
+  graph              Json
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  automations      Automation[]
+  runs             FlowRun[]
+  events           FlowEvent[]
+  links            FlowLink[]
+
+  @@index([workspaceId])
+  @@index([instagramAccountId, status])
+}
+
+/// One contact's pass through a flow.
+model FlowRun {
+  id             String        @id @default(cuid())
+  flowId         String
+  conversationId String
+  status         FlowRunStatus @default(RUNNING)
+  currentNodeId  String?
+  /// What the run is parked on: FlowWaiting (see lib/flows/types.ts).
+  waiting        Json?
+  retries        Int           @default(0)
+  /// Trigger context: { trigger, commentId?, automationId?, keyword?, ref? }.
+  context        Json          @default("{}")
+  /// Number of messages sent by this run (private reply counts as one).
+  sends          Int           @default(0)
+  lastError      String?
+  startedAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  completedAt    DateTime?
+
+  flow         Flow           @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  conversation DmConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  events       FlowEvent[]
+
+  @@index([conversationId, status])
+  @@index([flowId, status])
+}
+
+/// Per-step analytics (sent, clicked, input captured, ...).
+model FlowEvent {
+  id             String        @id @default(cuid())
+  flowId         String
+  runId          String?
+  nodeId         String
+  conversationId String?
+  type           FlowEventType
+  detail         Json?
+  createdAt      DateTime      @default(now())
+
+  flow Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  run  FlowRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([flowId, nodeId, type])
+  @@index([runId])
+  @@index([createdAt])
+}
+
+/// Tracked redirect for a URL button inside a flow (/f/<slug>).
+model FlowLink {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  flowId    String
+  nodeId    String
+  buttonId  String
+  url       String
+  createdAt DateTime @default(now())
+
+  flow Flow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@unique([flowId, nodeId, buttonId])
+}
+
+/// Uploaded image/video/audio/PDF used by flow steps. Served publicly at
+/// /api/media/<id>/<filename> so Meta can fetch it when sending.
+model MediaAsset {
+  id          String    @id @default(cuid())
+  workspaceId String
+  kind        MediaKind
+  filename    String
+  mimeType    String
+  size        Int
+  /// Path relative to MEDIA_DIR.
+  storageKey  String
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+enum FlowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+}
+
+enum FlowRunStatus {
+  /// Executing steps right now.
+  RUNNING
+  /// Parked on user input, a button tap, a delay, or the first reply.
+  WAITING
+  COMPLETED
+  FAILED
+  CANCELLED
+  /// The 24h window closed, or an input/button wait timed out.
+  EXPIRED
+}
+
+enum FlowEventType {
+  STARTED
+  SENT
+  SEND_FAILED
+  CLICKED
+  REPLIED
+  INPUT_VALID
+  INPUT_INVALID
+  CONDITION_TRUE
+  CONDITION_FALSE
+  ACTION
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  AUDIO
+  FILE
 }

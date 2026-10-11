@@ -23,6 +23,8 @@ import {
 import { decryptToken } from "@/lib/meta/oauth";
 import { getDMQueue, INBOUND_DM_JOB_NAME } from "@/lib/queue/client";
 import { Prisma } from "@/app/generated/prisma/client";
+import { hasGraphContent, normalizeGraphMessage } from "@/lib/meta/attachments";
+import { captureMessageMedia } from "@/lib/media/inbound";
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Newest threads first; a sweep never needs to touch cold history. */
@@ -43,17 +45,23 @@ interface SweepStats {
   enqueued: number;
 }
 
-async function sweepAccount(account: {
-  id: string;
-  instagramId: string;
-  accessToken: string;
-}): Promise<{ backfilled: number; enqueued: number }> {
+async function sweepAccount(
+  account: {
+    id: string;
+    instagramId: string;
+    accessToken: string;
+  },
+  options: { maxThreads: number; enqueue: boolean } = {
+    maxThreads: MAX_THREADS_PER_ACCOUNT,
+    enqueue: true,
+  }
+): Promise<{ backfilled: number; enqueued: number }> {
   const accessToken = decryptToken(account.accessToken);
   const threads = await getConversations(accessToken, account.instagramId);
   let backfilled = 0;
   let enqueued = 0;
 
-  for (const thread of threads.slice(0, MAX_THREADS_PER_ACCOUNT)) {
+  for (const thread of threads.slice(0, options.maxThreads)) {
     const participants = thread.participants?.data ?? [];
     const contact = participants.find((p) => p.id !== account.instagramId);
     if (!contact?.id) continue;
@@ -81,37 +89,82 @@ async function sweepAccount(account: {
     // Meta returns newest first; walk oldest first so timestamps land in
     // order and "newest missed inbound" is simply the last one we add.
     const ordered = [...(messages ?? [])].reverse();
-    let newestMissedInbound: { mid: string; text: string; sentAt: Date } | null =
-      null;
+    let newestMissedInbound: {
+      mid: string;
+      text: string;
+      kind: ReturnType<typeof normalizeGraphMessage>["kind"];
+      rawText: string;
+      sentAt: Date;
+    } | null = null;
 
     for (const message of ordered) {
       const mid = message.id;
-      const text = message.message?.trim();
-      if (!mid || !text) continue;
+      if (!mid || !hasGraphContent(message)) continue;
+      const normalized = normalizeGraphMessage(message);
+      const text = normalized.text;
       const isEcho = message.from?.id === account.instagramId;
       const sentAt = message.created_time
         ? new Date(message.created_time)
         : new Date();
+      const attachments =
+        normalized.attachments.length > 0
+          ? (normalized.attachments as unknown as Prisma.InputJsonValue)
+          : undefined;
 
+      let createdId: string;
       try {
-        await prisma.dmMessage.create({
+        const created = await prisma.dmMessage.create({
           data: {
             conversationId: conversation.id,
             mid,
             direction: isEcho ? "OUT" : "IN",
             source: isEcho ? "HUMAN" : "PARTICIPANT",
             text,
+            kind: normalized.kind,
+            ...(attachments ? { attachments } : {}),
             sentAt,
           },
+          select: { id: true },
         });
+        createdId = created.id;
       } catch (error: unknown) {
-        if (isUniqueViolation(error)) continue; // mirror already has it
-        throw error;
+        if (!isUniqueViolation(error)) throw error;
+        // Mirror already has it. Repair rows stored before rich mirroring
+        // ("[media]" placeholders) while Meta still returns their content.
+        const repaired = await prisma.dmMessage.updateMany({
+          where: { mid, text: "[media]" },
+          data: { text, kind: normalized.kind, ...(attachments ? { attachments } : {}) },
+        });
+        if (repaired.count > 0 && normalized.attachments.length > 0) {
+          const row = await prisma.dmMessage.findUnique({ where: { mid }, select: { id: true } });
+          if (row) {
+            await captureMessageMedia({
+              id: row.id,
+              conversationId: conversation.id,
+              attachments: normalized.attachments,
+            }).catch(() => {});
+          }
+        }
+        continue;
+      }
+
+      if (normalized.attachments.length > 0) {
+        await captureMessageMedia({
+          id: createdId,
+          conversationId: conversation.id,
+          attachments: normalized.attachments,
+        }).catch(() => {});
       }
 
       backfilled += 1;
       if (!isEcho) {
-        newestMissedInbound = { mid, text, sentAt };
+        newestMissedInbound = {
+          mid,
+          text,
+          kind: normalized.kind,
+          rawText: message.message?.trim() ?? "",
+          sentAt,
+        };
       } else {
         newestMissedInbound = null;
       }
@@ -130,6 +183,7 @@ async function sweepAccount(account: {
     // window is still open. The deterministic job id makes this a no-op
     // when the webhook actually did arrive.
     if (
+      options.enqueue &&
       newestMissedInbound &&
       Date.now() - newestMissedInbound.sentAt.getTime() < WINDOW_MS
     ) {
@@ -140,6 +194,9 @@ async function sweepAccount(account: {
           participantId: contact.id,
           mid: newestMissedInbound.mid,
           text: newestMissedInbound.text,
+          kind: newestMissedInbound.kind,
+          rawText: newestMissedInbound.rawText,
+          mirrored: true,
           isEcho: false,
           timestamp: newestMissedInbound.sentAt.getTime(),
         },
@@ -186,6 +243,23 @@ export async function reconcileDms(): Promise<SweepStats> {
     console.log(
       `[DM Reconciler] Backfilled ${stats.backfilled} messages, enqueued ${stats.enqueued} for the setter`
     );
+  }
+  return stats;
+}
+
+/**
+ * Mirror-only backfill of up to `maxThreads` threads per account (Meta's
+ * first page holds 50). Never hands anything to the setter or flows, so it
+ * is safe to run once after deploy to fill the inbox with older threads.
+ */
+export async function backfillMirror(maxThreads = 50): Promise<SweepStats> {
+  const accounts = await prisma.instagramAccount.findMany({
+    select: { id: true, instagramId: true, accessToken: true },
+  });
+  const stats: SweepStats = { accounts: accounts.length, backfilled: 0, enqueued: 0 };
+  for (const account of accounts) {
+    const result = await sweepAccount(account, { maxThreads, enqueue: false });
+    stats.backfilled += result.backfilled;
   }
   return stats;
 }

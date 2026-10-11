@@ -5,6 +5,7 @@
  * corrections, and how much corpus evidence exists.
  */
 
+import { isMediaOnly } from "@/lib/meta/attachments";
 import { prisma } from "@/lib/db/client";
 import { loadAgentFootprint } from "./agent-footprint";
 import { isAgentAuthored } from "./authorship";
@@ -36,7 +37,7 @@ export async function loadVoiceContext(conversation: {
         where: { conversationId: conversation.id, direction: "OUT", source: "HUMAN" },
         orderBy: { sentAt: "desc" },
         take: STYLE_ANCHOR_SCAN,
-        select: { mid: true, text: true, sentAt: true, source: true },
+        select: { mid: true, text: true, kind: true, sentAt: true, source: true },
       }),
       loadAgentFootprint({
         instagramAccountId: conversation.instagramAccountId,
@@ -63,7 +64,7 @@ export async function loadVoiceContext(conversation: {
   const humanStyleAnchor = humanRows
     .filter(
       (row) =>
-        row.text !== "[media]" &&
+        !isMediaOnly(row) &&
         !isAgentAuthored(
           {
             ...row,

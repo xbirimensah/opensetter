@@ -107,6 +107,15 @@ vi.mock("@/lib/queue/client", () => ({
   POSTBACK_JOB_NAME: "process-postback",
   INBOUND_DM_JOB_NAME: "process-inbound-dm",
   WINDOW_NUDGE_JOB_NAME: "process-window-nudge",
+  FLOW_RESUME_JOB_NAME: "process-flow-resume",
+  REFERRAL_JOB_NAME: "process-referral",
+}));
+
+vi.mock("@/lib/flows/service", () => ({
+  handlePostbackForFlows: vi.fn().mockResolvedValue(false),
+  handleReferralForFlows: vi.fn().mockResolvedValue(false),
+  resumeFlowRun: vi.fn().mockResolvedValue(undefined),
+  startFlowFromComment: vi.fn(),
 }));
 
 vi.mock("bullmq", () => {
