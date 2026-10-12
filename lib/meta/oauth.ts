@@ -103,6 +103,7 @@ export async function exchangeCodeForToken(
   });
 
   const response = await fetch(INSTAGRAM_TOKEN_URL, {
+    signal: AbortSignal.timeout(30_000),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
@@ -122,8 +123,42 @@ export async function exchangeCodeForToken(
   };
 }
 
+/**
+ * Instagram tokens are AES-256-GCM encrypted with ENCRYPTION_KEY. Keys can
+ * be rotated: put the old key in ENCRYPTION_KEYS_PREVIOUS (comma-separated),
+ * set a new ENCRYPTION_KEY, then run scripts/rotate-encryption-key.ts.
+ * New ciphertexts are "v2:<key id>:<base64>", so the right key is picked
+ * directly; older unlabelled ciphertexts are tried against every key.
+ */
+const KEY_ID_LENGTH = 8;
+
+function keyId(key: Buffer): string {
+  return createHmac("sha256", key).update("opensetter-token-key-id").digest("hex").slice(0, KEY_ID_LENGTH);
+}
+
 function getEncryptionKey(): Buffer {
   return Buffer.from(getEncryptionKeyHex(), "hex");
+}
+
+function previousEncryptionKeys(): Buffer[] {
+  return (process.env.ENCRYPTION_KEYS_PREVIOUS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => /^[0-9a-f]{64}$/i.test(value))
+    .map((value) => Buffer.from(value, "hex"));
+}
+
+function decryptWith(key: Buffer, combined: Buffer): string {
+  const iv = combined.subarray(0, IV_LENGTH);
+  const authTag = combined.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
+  const ciphertext = combined.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
+
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(authTag);
+
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString(
+    "utf8"
+  );
 }
 
 export function encryptToken(plaintext: string): string {
@@ -138,21 +173,32 @@ export function encryptToken(plaintext: string): string {
   const authTag = cipher.getAuthTag();
   const combined = Buffer.concat([iv, authTag, encrypted]);
 
-  return combined.toString("base64");
+  return `v2:${keyId(key)}:${combined.toString("base64")}`;
 }
 
-export function decryptToken(encryptedBase64: string): string {
-  const key = getEncryptionKey();
-  const combined = Buffer.from(encryptedBase64, "base64");
+export function decryptToken(stored: string): string {
+  const keys = [getEncryptionKey(), ...previousEncryptionKeys()];
+  if (stored.startsWith("v2:")) {
+    const [, id, data] = stored.split(":");
+    const key = keys.find((candidate) => keyId(candidate) === id);
+    if (!key) throw new Error("Token was encrypted with a key that is no longer configured");
+    return decryptWith(key, Buffer.from(data ?? "", "base64"));
+  }
+  // Unlabelled tokens from before rotation support: the GCM tag tells us
+  // which key fits.
+  const combined = Buffer.from(stored, "base64");
+  let lastError: unknown = null;
+  for (const key of keys) {
+    try {
+      return decryptWith(key, combined);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("Could not decrypt token");
+}
 
-  const iv = combined.subarray(0, IV_LENGTH);
-  const authTag = combined.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
-  const ciphertext = combined.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
-
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
-
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString(
-    "utf8"
-  );
+/** True when a stored token is not yet labelled with the current key. */
+export function needsReencryption(stored: string): boolean {
+  return !stored.startsWith(`v2:${keyId(getEncryptionKey())}:`);
 }

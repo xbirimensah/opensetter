@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { audit } from "@/lib/audit";
 import { z } from "zod";
 import {
   canManageWorkspace,
@@ -20,7 +21,13 @@ const configSchema = z.object({
   mode: z.enum(["OFF", "DRAFT", "AUTO"]),
   persona: z.string().max(4000).optional().nullable(),
   goal: z.string().max(2000).optional().nullable(),
-  bookingLink: z.string().max(500).optional().nullable(),
+  // Sent to prospects verbatim: https links only (no javascript:, data:, http:).
+  bookingLink: z
+    .string()
+    .max(500)
+    .refine((value) => value.trim() === "" || /^https:\/\/[^\s]+$/i.test(value.trim()), "Use an https:// link")
+    .optional()
+    .nullable(),
   language: z.string().max(40).optional().nullable(),
   knowledgeEnabled: z.boolean(),
   styleExamplesEnabled: z.boolean(),
@@ -81,6 +88,12 @@ const OPERATIONAL_FIELDS = [
   "windowNudgeHours",
   "blockedUserIds",
   "strictVoiceEvidence",
+  // What the unattended setter says to prospects is a manager decision too.
+  "persona",
+  "goal",
+  "bookingLink",
+  "voiceRules",
+  "knowledgeEnabled",
 ] as const;
 
 type OperationalField = (typeof OPERATIONAL_FIELDS)[number];
@@ -215,6 +228,11 @@ export async function PUT(request: NextRequest) {
         windowNudgeHours: true,
         blockedUserIds: true,
         strictVoiceEvidence: true,
+        persona: true,
+        goal: true,
+        bookingLink: true,
+        voiceRules: true,
+        knowledgeEnabled: true,
         llmProvider: true,
         llmModel: true,
       },
@@ -294,11 +312,27 @@ export async function PUT(request: NextRequest) {
     ...(llmProvider !== undefined ? { llmProvider, llmModel } : {}),
   };
 
+  const previousMode =
+    (
+      await prisma.aiSetterConfig.findUnique({
+        where: { instagramAccountId: account.id },
+        select: { mode: true },
+      })
+    )?.mode ?? DEFAULT_CONFIG.mode;
+
   const config = await prisma.aiSetterConfig.upsert({
     where: { instagramAccountId: account.id },
     create: { instagramAccountId: account.id, ...values },
     update: values,
   });
+  if (previousMode !== parsed.mode) {
+    await audit({
+      action: "ai.setter_mode_changed",
+      workspaceId,
+      actorUserId: context.userId,
+      detail: { instagramAccountId: account.id, from: previousMode, to: parsed.mode },
+    });
+  }
 
   return NextResponse.json({ success: true, data: { config } });
 }

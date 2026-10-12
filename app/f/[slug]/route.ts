@@ -49,5 +49,9 @@ export async function GET(request: NextRequest, { params }: FlowLinkRouteProps) 
       .catch(() => {});
   }
 
+  // Only web links are followed (a flow button can't send people to javascript: or data:).
+  if (!/^https?:\/\//i.test(link.url)) {
+    return NextResponse.redirect(new URL("/", request.url), { status: 302 });
+  }
   return NextResponse.redirect(link.url, { status: 302 });
 }

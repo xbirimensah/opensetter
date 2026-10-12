@@ -6,37 +6,31 @@
  * OpenSetter host runs Postgres, Redis and other services locally).
  */
 
-import { lookup } from "dns/promises";
 import { isIP } from "net";
+import { isPrivateAddress as isPrivateProviderAddress } from "@/lib/ai-setter/providers/base-url";
+import { requestGuarded } from "@/lib/ai-setter/providers/guarded-request";
 
 const TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 256 * 1024;
 
+/**
+ * Loopback, private, CGNAT (also Tailscale), link-local, benchmark,
+ * multicast and the IPv6 forms that embed one of those. Non-IP input is
+ * treated as unsafe.
+ */
 export function isPrivateAddress(address: string): boolean {
-  const v = isIP(address);
-  if (v === 4) {
-    const [a, b] = address.split(".").map(Number);
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) || // CGNAT, also Tailscale
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      a >= 224
-    );
+  const host = address.replace(/^\[|\]$/g, "");
+  if (!isIP(host)) return true;
+  if (isPrivateProviderAddress(host)) return true;
+  if (isIP(host) === 4) {
+    const [a, b] = host.split(".").map(Number);
+    // CGNAT is checked here too, so the guard never depends on one list.
+    return a === 100 && b >= 64 && b <= 127;
   }
-  if (v === 6) {
-    const lower = address.toLowerCase();
-    if (lower === "::1" || lower === "::") return true;
-    if (lower.startsWith("::ffff:")) return isPrivateAddress(lower.slice(7));
-    return /^(fc|fd|fe8|fe9|fea|feb)/.test(lower);
-  }
-  return true;
+  return false;
 }
 
-export async function assertPublicHttpsUrl(raw: string): Promise<URL> {
+export function assertPublicHttpsUrl(raw: string): URL {
   let url: URL;
   try {
     url = new URL(raw);
@@ -45,15 +39,25 @@ export async function assertPublicHttpsUrl(raw: string): Promise<URL> {
   }
   if (url.protocol !== "https:") throw new Error("Only https URLs are allowed");
   if (url.username || url.password) throw new Error("Credentials in URLs are not allowed");
-  const host = url.hostname.replace(/^\[|\]$/g, "");
+  if (url.port && url.port !== "443") throw new Error("Only the standard https port is allowed");
+  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) {
     throw new Error("Private hosts are not allowed");
   }
-  const addresses = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
-  if (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address))) {
-    throw new Error("Private network addresses are not allowed");
-  }
+  if (isIP(host) && isPrivateAddress(host)) throw new Error("Private network addresses are not allowed");
   return url;
+}
+
+/** Headers a flow author may not set: they'd change how the request travels, not what it says. */
+const FORBIDDEN_HEADERS = new Set([
+  "host", "connection", "content-length", "transfer-encoding", "te", "trailer", "upgrade",
+  "keep-alive", "proxy-authorization", "proxy-connection", "expect",
+]);
+
+function authorHeaders(headers: Record<string, string> | undefined): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers ?? {}).filter(([name]) => !FORBIDDEN_HEADERS.has(name.toLowerCase()))
+  );
 }
 
 export async function safeRequest(params: {
@@ -62,31 +66,27 @@ export async function safeRequest(params: {
   body?: string;
   headers?: Record<string, string>;
 }): Promise<{ ok: boolean; status: number; json: unknown }> {
-  const url = await assertPublicHttpsUrl(params.url);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const url = assertPublicHttpsUrl(params.url);
+  // Resolution is checked at connect time (no DNS rebinding), redirects are
+  // refused (they could point back into the private network) and the body
+  // read stops at MAX_RESPONSE_BYTES.
+  const response = await requestGuarded(url.toString(), {
+    method: params.method,
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; OpenSetter/1.0; +https://github.com/xbirimensah/opensetter)",
+      ...(params.body ? { "Content-Type": "application/json" } : {}),
+      ...authorHeaders(params.headers),
+    },
+    body: params.method === "POST" ? params.body : undefined,
+    timeoutMs: TIMEOUT_MS,
+    allowPrivate: false,
+    maxBytes: MAX_RESPONSE_BYTES,
+  });
+  let json: unknown = null;
   try {
-    const response = await fetch(url, {
-      method: params.method,
-      // Redirects could point back into the private network.
-      redirect: "error",
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; OpenSetter/1.0; +https://github.com/obirimensah05/opensetter)",
-        ...(params.body ? { "Content-Type": "application/json" } : {}),
-        ...(params.headers ?? {}),
-      },
-      body: params.method === "POST" ? params.body : undefined,
-    });
-    const text = (await response.text()).slice(0, MAX_RESPONSE_BYTES);
-    let json: unknown = null;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {
-      json = null;
-    }
-    return { ok: response.ok, status: response.status, json };
-  } finally {
-    clearTimeout(timer);
+    json = response.body ? JSON.parse(response.body) : null;
+  } catch {
+    json = null;
   }
+  return { ok: response.status >= 200 && response.status < 300, status: response.status, json };
 }

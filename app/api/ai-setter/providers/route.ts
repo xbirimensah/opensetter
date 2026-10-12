@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { audit } from "@/lib/audit";
 import { z } from "zod";
 import {
   canManageWorkspace,
@@ -101,6 +102,12 @@ export async function PUT(request: NextRequest) {
       defaultModel: parsed.defaultModel ?? null,
       userId: context.userId,
     });
+    await audit({
+      action: "ai.provider_key_saved",
+      workspaceId: context.workspaceId,
+      actorUserId: context.userId,
+      detail: { provider: parsed.provider },
+    });
     return NextResponse.json({ success: true, data: { provider } });
   } catch (error: unknown) {
     const name = error instanceof Error ? error.name : "";
@@ -134,5 +141,13 @@ export async function DELETE(request: NextRequest) {
   }
 
   const removed = await deleteProviderCredential(context.workspaceId, provider);
+  if (removed) {
+    await audit({
+      action: "ai.provider_key_removed",
+      workspaceId: context.workspaceId,
+      actorUserId: context.userId,
+      detail: { provider },
+    });
+  }
   return NextResponse.json({ success: true, data: { removed } });
 }

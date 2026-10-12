@@ -8,6 +8,7 @@
 
 import type { DraftReply } from "./types";
 import { isReplyLanguageCompatible, type ChatLanguage } from "./language";
+import { containsSecretMaterial } from "./secret-guard";
 
 /** Instagram rejects DM text above 1000 chars; stay under with margin. */
 const MAX_DRAFT_LENGTH = 900;
@@ -212,6 +213,9 @@ export function evaluateAutoSendSafety(params: {
   }
   if (matchesSensitiveTopic(draftText)) {
     reasons.push("draft reply matches a sensitive-topic pattern");
+  }
+  if (containsSecretMaterial(draftText)) {
+    reasons.push("draft contains secret-looking material");
   }
   if (draftText) {
     if (isEmojiOnlyReply(draftText)) reasons.push("draft is emoji-only");

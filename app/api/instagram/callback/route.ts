@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { audit } from "@/lib/audit";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { getBaseUrl } from "@/lib/env";
@@ -114,6 +115,12 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    await audit({
+      action: "instagram.connected",
+      workspaceId: state.workspaceId,
+      actorUserId: session.user.id,
+      detail: { username: userInfo.username },
+    });
     return NextResponse.redirect(`${baseUrl}/dashboard?connected=true`);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

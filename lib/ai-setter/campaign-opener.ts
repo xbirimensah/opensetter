@@ -9,7 +9,8 @@
  */
 
 import { completeSetterPrompt } from "./llm";
-import { resolveLlmTarget, type LlmSelection } from "./providers/resolve";
+import { containsSecretMaterial } from "./secret-guard";
+import { requireSelection, resolveLlmTarget, type LlmSelection } from "./providers/resolve";
 
 const MAX_OPENER_LENGTH = 800;
 
@@ -78,15 +79,16 @@ export async function personalizeCampaignOpener(
       "</untrusted>",
     ].join("\n");
 
-    const target = params.llmSelection
-      ? await resolveLlmTarget(params.llmSelection)
-      : null;
+    const target = await resolveLlmTarget(requireSelection(params.llmSelection));
     const raw = await completeSetterPrompt(
       buildSystemPrompt(params),
       userPrompt,
       target
     );
-    return validateOpenerText(raw, params.baseMessage);
+    const opener = validateOpenerText(raw, params.baseMessage);
+    // Never let model output that looks like a secret reach a commenter.
+    // null means "send the static template".
+    return opener && containsSecretMaterial(opener) ? null : opener;
   } catch (error: unknown) {
     console.error("[ai-setter] opener personalization failed:", error);
     return null;

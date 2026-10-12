@@ -628,6 +628,9 @@ enum OperationalEventSource {
   TOKEN_REFRESH
   HEALTH
   SYSTEM
+  /// Security-relevant actions (lib/audit.ts): sign-ins, passwords, roles,
+  /// account connections, provider keys.
+  AUDIT
 }
 
 enum OperationalEventLevel {

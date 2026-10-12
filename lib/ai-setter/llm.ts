@@ -22,6 +22,10 @@ import type { ApiLlmTarget, CliLlmTarget, LlmTarget } from "./providers/resolve"
 import {
   buildClaudeCliArgs,
   buildCodexCliArgs,
+  cliEnvironment,
+  cliWorkingDirectory,
+  codexCliEnabled,
+  CODEX_CLI_ENV,
   resolveCliBin,
   type CliProviderId,
 } from "./providers/cli";
@@ -198,6 +202,9 @@ async function completeViaCli(
   prompt: string,
   model: string | null
 ): Promise<string> {
+  if (provider === "codex-cli" && !codexCliEnabled()) {
+    throw new Error(`The Codex CLI provider is off; set ${CODEX_CLI_ENV}=on to allow it (it can read files on this server)`);
+  }
   const args =
     provider === "codex-cli"
       ? buildCodexCliArgs(prompt, model || null)
@@ -205,6 +212,8 @@ async function completeViaCli(
   const { stdout } = await execFileAsync(resolveCliBin(provider), args, {
     timeout: CLI_TIMEOUT_MS,
     maxBuffer: 1024 * 1024,
+    env: cliEnvironment(),
+    cwd: cliWorkingDirectory(),
   });
   return stdout;
 }

@@ -15,6 +15,7 @@ import { mkdir, stat, writeFile } from "fs/promises";
 import path from "path";
 import { Readable } from "stream";
 import { getBaseUrl } from "@/lib/env";
+import { isMetaCdnUrl } from "./cdn-hosts";
 
 /** Hard cap on any stored file; Meta's own send limit is 25MB. */
 export const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
@@ -94,6 +95,42 @@ export function extensionFor(mimeType: string | null | undefined): string {
  * Copy one inbound CDN file into MEDIA_DIR. Returns the storage key and
  * content type, or null when the download fails or is too large.
  */
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+const MAX_REDIRECTS = 3;
+
+/** Follow redirects by hand so every hop stays on Meta's CDN. */
+async function fetchMetaCdn(url: string): Promise<Response | null> {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    if (!isMetaCdnUrl(current)) return null;
+    const response = await fetch(current, { redirect: "manual", signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+    if (response.status < 300 || response.status >= 400) return response;
+    const location = response.headers.get("location");
+    if (!location) return null;
+    current = new URL(location, current).toString();
+  }
+  return null;
+}
+
+/** Read a body, giving up past maxBytes (a missing content-length can't bypass the cap). */
+async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array | null> {
+  const reader = response.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
 export async function downloadInboundMedia(params: {
   url: string;
   conversationId: string;
@@ -101,12 +138,12 @@ export async function downloadInboundMedia(params: {
   index: number;
 }): Promise<{ key: string; mimeType: string } | null> {
   try {
-    const response = await fetch(params.url, { redirect: "follow" });
-    if (!response.ok) return null;
+    const response = await fetchMetaCdn(params.url);
+    if (!response?.ok) return null;
     const declared = Number(response.headers.get("content-length") ?? 0);
     if (declared > MAX_MEDIA_BYTES) return null;
-    const buffer = new Uint8Array(await response.arrayBuffer());
-    if (buffer.byteLength === 0 || buffer.byteLength > MAX_MEDIA_BYTES) return null;
+    const buffer = await readCapped(response, MAX_MEDIA_BYTES);
+    if (!buffer || buffer.byteLength === 0) return null;
     const mimeType = (response.headers.get("content-type") ?? "application/octet-stream")
       .split(";")[0]
       .trim();

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { audit } from "@/lib/audit";
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
 import {
@@ -62,12 +63,14 @@ async function getMemberPayload(
     }),
   ]);
 
+  // Invite links are bearer links: only people who manage the workspace see them.
+  const canSeeLinks = currentUserRole ? canManageWorkspace(currentUserRole) : false;
   return {
     ...(currentUserRole ? { currentUserRole } : {}),
     members,
-    invitations: invitations.map((invitation) => ({
+    invitations: invitations.map(({ token, ...invitation }) => ({
       ...invitation,
-      inviteUrl: buildInvitationUrl(invitation.token),
+      ...(canSeeLinks ? { inviteUrl: buildInvitationUrl(token) } : {}),
     })),
   };
 }
@@ -113,30 +116,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (parsed.data.role === "ADMIN" && context.role !== "OWNER") {
+    return NextResponse.json(
+      { success: false, error: "Only the owner can invite admins" },
+      { status: 403 }
+    );
+  }
+
   const email = normalizeInvitationEmail(parsed.data.email);
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
+  const existingMember = await prisma.workspaceMember.findFirst({
+    where: { workspaceId: context.workspaceId, user: { email } },
     select: { id: true },
   });
+  if (existingMember) {
+    // Never change an existing member's role here: that is how an admin
+    // could demote the owner. Roles change through PATCH, with its checks.
+    return NextResponse.json(
+      { success: false, error: "Already a member. Change their role in the member list." },
+      { status: 409 }
+    );
+  }
 
-  if (existingUser) {
-    await prisma.workspaceMember.upsert({
-      where: {
-        workspaceId_userId: {
-          workspaceId: context.workspaceId,
-          userId: existingUser.id,
-        },
-      },
-      create: {
-        workspaceId: context.workspaceId,
-        userId: existingUser.id,
-        role: parsed.data.role,
-      },
-      update: {
-        role: parsed.data.role,
-      },
-    });
-  } else {
+  // Everyone, existing users included, gets an invitation they must accept:
+  // nobody is added to a workspace without saying yes.
+  {
     await prisma.workspaceInvitation.upsert({
       where: {
         workspaceId_email: {
@@ -161,6 +164,12 @@ export async function POST(request: NextRequest) {
       },
     });
   }
+  await audit({
+    action: "workspace.member_invited",
+    workspaceId: context.workspaceId,
+    actorUserId: context.userId,
+    detail: { email, role: parsed.data.role },
+  });
 
   return NextResponse.json({
     success: true,
@@ -194,16 +203,28 @@ export async function PATCH(request: NextRequest) {
   const member = await prisma.workspaceMember.findFirst({
     where: { id: parsed.data.memberId, workspaceId: context.workspaceId },
   });
-  if (!member || member.role === "OWNER") {
+  if (!member || member.role === "OWNER" || member.userId === context.userId) {
     return NextResponse.json(
       { success: false, error: "Member cannot be updated" },
       { status: 400 }
+    );
+  }
+  if ((member.role === "ADMIN" || parsed.data.role === "ADMIN") && context.role !== "OWNER") {
+    return NextResponse.json(
+      { success: false, error: "Only the owner can grant or remove admin rights" },
+      { status: 403 }
     );
   }
 
   await prisma.workspaceMember.update({
     where: { id: member.id },
     data: { role: parsed.data.role },
+  });
+  await audit({
+    action: "workspace.member_role_changed",
+    workspaceId: context.workspaceId,
+    actorUserId: context.userId,
+    detail: { memberUserId: member.userId, from: member.role, to: parsed.data.role },
   });
 
   return NextResponse.json({
@@ -245,8 +266,20 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (member.role === "ADMIN" && context.role !== "OWNER") {
+      return NextResponse.json(
+        { success: false, error: "Only the owner can remove an admin" },
+        { status: 403 }
+      );
+    }
 
     await prisma.workspaceMember.delete({ where: { id: member.id } });
+    await audit({
+      action: "workspace.member_removed",
+      workspaceId: context.workspaceId,
+      actorUserId: context.userId,
+      detail: { memberUserId: member.userId, role: member.role },
+    });
   }
 
   if (parsed.data.invitationId) {
@@ -257,6 +290,12 @@ export async function DELETE(request: NextRequest) {
         status: "PENDING",
       },
       data: { status: "REVOKED" },
+    });
+    await audit({
+      action: "workspace.invitation_revoked",
+      workspaceId: context.workspaceId,
+      actorUserId: context.userId,
+      detail: { invitationId: parsed.data.invitationId },
     });
   }
 

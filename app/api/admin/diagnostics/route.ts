@@ -1,19 +1,41 @@
 import { NextResponse } from "next/server";
-import { getCurrentWorkspaceId } from "@/lib/auth";
+import { canManageWorkspace, getCurrentWorkspaceContext } from "@/lib/workspace-access";
+import { isOperatorWorkspace } from "@/lib/ai-setter/operator";
 import { prisma } from "@/lib/db/client";
 import { getDMQueue } from "@/lib/queue/client";
 import { getWorkerAlerts, getWorkerHealth } from "@/lib/ops/worker-health";
 
 export const runtime = "nodejs";
 
+const REDIS_CHECK_TIMEOUT_MS = 3_000;
+
+/** The check's result, or the fallback when it fails or Redis doesn't answer in time. */
+function withTimeout<T>(check: Promise<T>, fallback: T): Promise<T> {
+  return Promise.race([
+    check.catch(() => fallback),
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), REDIS_CHECK_TIMEOUT_MS)),
+  ]);
+}
+
 export async function GET() {
-  const workspaceId = await getCurrentWorkspaceId();
-  if (!workspaceId) {
+  const context = await getCurrentWorkspaceContext();
+  if (!context) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
       { status: 401 }
     );
   }
+  // Queue, worker and error details are for the people who run the workspace.
+  if (!canManageWorkspace(context.role)) {
+    return NextResponse.json(
+      { success: false, error: "Only owners and admins can see diagnostics" },
+      { status: 403 }
+    );
+  }
+  const { workspaceId } = context;
+  // Instance-wide events (no workspace: system errors, sign-in audit) are the
+  // operator's alone; other workspaces see only their own.
+  const seesInstanceEvents = await isOperatorWorkspace(workspaceId);
 
   const [
     queueCounts,
@@ -24,9 +46,14 @@ export async function GET() {
     tokenRefreshFailures,
     operationalEvents,
   ] = await Promise.all([
-    getDMQueue().getJobCounts("waiting", "active", "delayed", "failed"),
-    getWorkerHealth(),
-    getWorkerAlerts(10),
+    // Redis-backed checks give up after a few seconds, so the database
+    // sections (failures, events) still load while Redis is down.
+    withTimeout(
+      getDMQueue().getJobCounts("waiting", "active", "delayed", "failed"),
+      {} as Record<string, number>
+    ),
+    withTimeout(getWorkerHealth(), { healthy: false, heartbeat: null, ageMs: null }),
+    withTimeout(getWorkerAlerts(10), []),
     prisma.webhookEvent.findMany({
       where: { workspaceId, status: "FAILED" },
       orderBy: { createdAt: "desc" },
@@ -75,9 +102,7 @@ export async function GET() {
       },
     }),
     prisma.operationalEvent.findMany({
-      where: {
-        OR: [{ workspaceId }, { workspaceId: null }],
-      },
+      where: seesInstanceEvents ? { OR: [{ workspaceId }, { workspaceId: null }] } : { workspaceId },
       orderBy: { createdAt: "desc" },
       take: 20,
       select: {

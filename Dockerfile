@@ -25,4 +25,9 @@ RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 3000
 
+# Run as the unprivileged "node" user; it only needs to write the media
+# folder and Next's runtime cache.
+RUN mkdir -p /app/data/media && chown -R node:node /app/data /app/.next
+USER node
+
 CMD ["sh", "-c", "npx prisma migrate deploy && npx next start -p 3000"]

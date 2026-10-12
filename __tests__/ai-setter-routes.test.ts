@@ -458,6 +458,11 @@ describe("/api/ai-setter/config operational settings", () => {
     windowNudgeHours: 20,
     blockedUserIds: ["blocked_1"],
     strictVoiceEvidence: true,
+    persona: "fitness coach",
+    goal: null,
+    bookingLink: null,
+    voiceRules: null,
+    knowledgeEnabled: true,
     llmProvider: null,
     llmModel: null,
   };
@@ -525,6 +530,7 @@ describe("/api/ai-setter/config operational settings", () => {
     const response = await configRoute.PUT(
       jsonRequest("/api/ai-setter/config", "PUT", {
         ...payload,
+        persona: undefined,
         mode: "OFF",
         minConfidence: 0.78,
         blockedUserIds: [],
@@ -534,24 +540,42 @@ describe("/api/ai-setter/config operational settings", () => {
     expect(response.status).toBe(200);
   });
 
-  it("lets members edit persona and voice settings when operational values are unchanged", async () => {
+  it("keeps members from changing what the setter says to prospects", async () => {
+    asMember();
+    for (const change of [
+      { persona: "new persona" },
+      { goal: "book calls" },
+      { voiceRules: "klein schreiben" },
+      { bookingLink: "https://cal.com/someone-else" },
+      { knowledgeEnabled: false },
+    ]) {
+      const response = await configRoute.PUT(
+        jsonRequest("/api/ai-setter/config", "PUT", { ...payload, ...change })
+      );
+      expect(response.status).toBe(403);
+    }
+    expect(mocks.prisma.aiSetterConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it("still lets members change settings that don't steer replies", async () => {
     asMember();
     const response = await configRoute.PUT(
-      jsonRequest("/api/ai-setter/config", "PUT", {
-        ...payload,
-        persona: "new persona",
-        goal: "book calls",
-        voiceRules: "klein schreiben",
-        styleCorpusEnabled: false,
-        blockedUserIds: ["blocked_1"],
-      })
+      jsonRequest("/api/ai-setter/config", "PUT", { ...payload, styleCorpusEnabled: false })
     );
     expect(response.status).toBe(200);
     expect(mocks.prisma.aiSetterConfig.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        update: expect.objectContaining({ persona: "new persona", mode: "DRAFT", minConfidence: 0.8 }),
+        update: expect.objectContaining({ persona: "fitness coach", mode: "DRAFT", minConfidence: 0.8 }),
       })
     );
+  });
+
+  it("accepts only https booking links", async () => {
+    mocks.getCurrentWorkspaceContext.mockResolvedValue({ userId: "u", workspaceId: "ws_1", role: "OWNER" });
+    for (const bookingLink of ["javascript:alert(1)", "http://cal.com/x", "data:text/html,hi"]) {
+      const response = await configRoute.PUT(jsonRequest("/api/ai-setter/config", "PUT", { ...payload, bookingLink }));
+      expect(response.status).toBe(400);
+    }
   });
 
   it("treats a reordered block list as unchanged", async () => {

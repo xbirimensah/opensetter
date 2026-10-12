@@ -10,10 +10,13 @@
 import { PROVIDER_CATALOG, isProviderId, type ProviderId, type ProviderApiStyle } from "./catalog";
 import { getCredentialEncryptionReadiness } from "./credential-crypto";
 import { loadProviderSecret } from "./credentials";
+import { isOperatorWorkspace } from "../operator";
 import {
   CLI_CATALOG,
   CLI_PROVIDERS_ENV,
+  CODEX_CLI_ENV,
   cliProvidersEnabled,
+  codexCliEnabled,
   isCliProviderId,
   isValidCliModelId,
   type CliProviderId,
@@ -52,12 +55,38 @@ export class LlmConfigurationError extends Error {
   }
 }
 
+/**
+ * Every model call names its workspace, so the operator check below can't
+ * be skipped by leaving the selection out.
+ */
+export function requireSelection(selection: LlmSelection | null | undefined): LlmSelection {
+  if (!selection?.workspaceId) {
+    throw new LlmConfigurationError("A model call needs the workspace it runs for");
+  }
+  return selection;
+}
+
 export async function resolveLlmTarget(
   selection: LlmSelection
 ): Promise<LlmTarget | null> {
   const provider = selection.provider?.trim();
-  if (!provider) return null;
-  if (isCliProviderId(provider)) return resolveCliTarget(provider, selection.model);
+  if (!provider) {
+    // No selection = the server's own env key, which only the operator may spend.
+    if (!(await isOperatorWorkspace(selection.workspaceId))) {
+      throw new LlmConfigurationError(
+        "Choose a model provider and save its API key in the AI Setter settings"
+      );
+    }
+    return null;
+  }
+  if (isCliProviderId(provider)) {
+    if (!(await isOperatorWorkspace(selection.workspaceId))) {
+      throw new LlmConfigurationError(
+        `${CLI_CATALOG[provider].label} runs under the server's own login and is only available to the instance operator`
+      );
+    }
+    return resolveCliTarget(provider, selection.model);
+  }
   if (!isProviderId(provider)) {
     throw new LlmConfigurationError(`Unknown model provider "${provider}"`);
   }
@@ -90,6 +119,11 @@ function resolveCliTarget(provider: CliProviderId, rawModel: string | null): Cli
   if (!cliProvidersEnabled()) {
     throw new LlmConfigurationError(
       `${label} is selected but local CLI providers are switched off (${CLI_PROVIDERS_ENV}=off)`
+    );
+  }
+  if (provider === "codex-cli" && !codexCliEnabled()) {
+    throw new LlmConfigurationError(
+      `${label} is off: it can read files on this server, so it needs ${CODEX_CLI_ENV}=on`
     );
   }
   const model = rawModel?.trim() || null;

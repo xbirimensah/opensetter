@@ -1,8 +1,12 @@
+import { headers } from "next/headers";
+import { audit } from "@/lib/audit";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { auth, normalizeLoginEmail, signIn } from "@/lib/auth";
-import { isLoginThrottled, LOGIN_THROTTLE_MINUTES } from "@/lib/login-throttle";
+import { clientIp, isThrottled, LOGIN_THROTTLE_MINUTES, registerAttempt } from "@/lib/login-throttle";
+import { safeCallbackUrl } from "@/lib/safe-redirect";
 import { getCampaignTemplate } from "@/lib/templates/campaign-templates";
+import { ChevronRightIcon } from "@/components/nav-icons";
 
 export const metadata = {
   title: "Login - OpenSetter",
@@ -14,13 +18,7 @@ const ERRORS: Record<string, string> = {
   throttled: `Too many attempts. Wait ${LOGIN_THROTTLE_MINUTES} minutes, or get a sign-in link below.`,
 };
 
-const INPUT_CLASS =
-  "w-full px-4 py-3 rounded bg-surface border border-border text-sm text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none transition-colors";
-
-/** Only same-site paths, so the login form can't be used as an open redirect. */
-function safeCallbackUrl(raw: string | undefined, fallback: string): string {
-  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : fallback;
-}
+const INPUT_CLASS = "field";
 
 export default async function LoginPage({
   searchParams,
@@ -56,7 +54,8 @@ export default async function LoginPage({
   async function passwordLogin(formData: FormData) {
     "use server";
     const email = normalizeLoginEmail(formData.get("email"));
-    if (await isLoginThrottled(email)) redirect(throttledUrl);
+    // Explains a block up front; the attempt itself is counted in authorize.
+    if (await isThrottled("login", { email, ip: clientIp(await headers()) })) redirect(throttledUrl);
     try {
       await signIn("password", {
         email,
@@ -72,41 +71,49 @@ export default async function LoginPage({
 
   async function sendMagicLink(formData: FormData) {
     "use server";
-    await signIn("resend", {
-      email: String(formData.get("email") ?? ""),
-      redirectTo: callbackUrl,
-    });
+    const email = normalizeLoginEmail(formData.get("email"));
+    // Caps email sends per address and per IP (no mail bombing through us).
+    if (!(await registerAttempt("magic-link", { email, ip: clientIp(await headers()) }))) {
+      redirect(throttledUrl);
+    }
+    await audit({ action: "auth.email_link_requested", ip: clientIp(await headers()), detail: { email } });
+    try {
+      await signIn("resend", { email, redirectTo: callbackUrl });
+    } catch (error) {
+      // An address that may not sign in gets the same answer as one that
+      // may, so this form can't be used to find out who has an account.
+      if (error instanceof AuthError) redirect("/verify-request");
+      throw error;
+    }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-foreground">
+    <div className="flex min-h-dvh items-center justify-center px-5 py-12">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <h1 className="text-title-1 font-bold text-foreground">
             OpenSetter
           </h1>
-          <p className="text-muted text-sm leading-relaxed mt-2">
+          <p className="mt-2 text-sm leading-relaxed text-muted">
             {selectedTemplate
               ? `Sign in to use the ${selectedTemplate.title} template.`
               : "Sign in, then connect your Instagram professional account."}
           </p>
         </div>
 
-        <div className="panel rounded p-8 shadow-black/40">
+        <div className="panel p-6 sm:p-8">
           {selectedTemplate && !checkEmail && (
-            <div className="mb-5 border border-cyan-200/20 bg-cyan-300/10 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-cyan-100">
-                Template selected
-              </p>
-              <p className="mt-2 text-sm font-semibold text-white">
+            <div className="mb-6 rounded-xl bg-accent/10 px-4 py-3">
+              <p className="text-footnote font-semibold text-accent">Template selected</p>
+              <p className="mt-0.5 text-sm font-semibold text-foreground">
                 {selectedTemplate.title}
               </p>
             </div>
           )}
 
           {checkEmail ? (
-            <div className="text-center py-4">
-              <h2 className="text-lg font-semibold mb-2">Check your email</h2>
+            <div className="py-4 text-center">
+              <h2 className="mb-2 text-title-3 font-semibold">Check your email</h2>
               <p className="text-sm text-muted">
                 We sent you a secure sign-in link. Open it on this device to
                 continue.
@@ -114,14 +121,14 @@ export default async function LoginPage({
             </div>
           ) : (
             <>
-              <form action={passwordLogin} className="space-y-5">
+              <form action={passwordLogin} className="space-y-4">
                 {errorMessage && (
-                  <p role="alert" className="rounded border border-error/20 bg-error/10 px-4 py-3 text-sm text-error">
+                  <p role="alert" className="rounded-xl bg-error/12 px-4 py-3 text-sm text-error">
                     {errorMessage}
                   </p>
                 )}
-                <div className="space-y-2">
-                  <label htmlFor="email" className="block text-sm font-medium text-foreground">
+                <div className="space-y-1.5">
+                  <label htmlFor="email" className="field-label">
                     Email
                   </label>
                   <input
@@ -134,8 +141,8 @@ export default async function LoginPage({
                     className={INPUT_CLASS}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label htmlFor="password" className="block text-sm font-medium text-foreground">
+                <div className="space-y-1.5">
+                  <label htmlFor="password" className="field-label">
                     Password
                   </label>
                   <input
@@ -149,16 +156,22 @@ export default async function LoginPage({
                 </div>
                 <button
                   type="submit"
-                  className="w-full inline-flex items-center justify-center gap-2 rounded bg-accent px-6 py-3.5 text-sm font-semibold text-white transition-all active:scale-[0.98]"
+                  className="btn btn-primary mt-2 min-h-11 w-full"
                 >
                   Sign in
                 </button>
               </form>
 
-              <details className="mt-6 border-t border-border pt-5 group">
-                <summary className="cursor-pointer list-none text-center text-sm text-muted hover:text-foreground">
+              <details className="group mt-6 border-t border-border pt-5">
+                <summary className="cursor-pointer list-none text-center text-sm text-muted hover:text-foreground [&::-webkit-details-marker]:hidden">
                   First time here or forgot your password?{" "}
-                  <span className="text-accent">Get a sign-in link</span>
+                  <span className="inline-flex items-center gap-0.5 font-medium text-accent">
+                    Get a sign-in link
+                    <ChevronRightIcon
+                      size={14}
+                      className="transition-transform duration-200 group-open:rotate-90"
+                    />
+                  </span>
                 </summary>
                 <form action={sendMagicLink} className="mt-5 space-y-4">
                   <label htmlFor="link-email" className="sr-only">
@@ -175,11 +188,11 @@ export default async function LoginPage({
                   />
                   <button
                     type="submit"
-                    className="w-full inline-flex items-center justify-center rounded border border-border px-6 py-3 text-sm font-semibold text-foreground transition-all hover:border-border-hover active:scale-[0.98]"
+                    className="btn btn-secondary min-h-11 w-full"
                   >
                     Email me a sign-in link
                   </button>
-                  <p className="text-xs text-faint text-center">
+                  <p className="text-center text-caption text-faint">
                     After signing in, set a password in Settings to skip the email next time.
                   </p>
                 </form>

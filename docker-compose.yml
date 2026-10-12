@@ -13,7 +13,9 @@ services:
     environment:
       POSTGRES_DB: opensetter
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      # Set POSTGRES_PASSWORD in your shell or a root .env for anything beyond
+      # local testing, and use the same value in DATABASE_URL.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -41,8 +43,10 @@ services:
     env_file: .env
     environment:
       MEDIA_DIR: /app/data/media
+    # Localhost only: put a reverse proxy or tunnel (with https) in front.
+    # Publishing on all interfaces would expose the app on the LAN over http.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       postgres:
         condition: service_healthy

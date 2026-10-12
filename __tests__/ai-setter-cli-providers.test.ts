@@ -12,13 +12,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const mocks = vi.hoisted(() => ({
   execFile: vi.fn(),
   prisma: { aiProviderCredential: { findUnique: vi.fn() } },
+  isOperator: vi.fn(async () => true),
 }));
 
 vi.mock("child_process", () => ({ execFile: mocks.execFile }));
 vi.mock("@/lib/db/client", () => ({ prisma: mocks.prisma }));
+// The CLI runs under the server's own login: only the operator may use it.
+vi.mock("@/lib/ai-setter/operator", () => ({ isOperatorWorkspace: mocks.isOperator }));
 
 import {
   CLI_PROVIDERS_ENV,
+  CODEX_CLI_ENV,
+  cliEnvironment,
   buildClaudeCliArgs,
   buildCodexCliArgs,
   discoverCliProviders,
@@ -242,6 +247,7 @@ describe("CLI runtime", () => {
   });
 
   it("uses the CLI's own default model when none is chosen", async () => {
+    process.env[CODEX_CLI_ENV] = "on";
     const target = await resolveLlmTarget({ workspaceId: "ws_1", provider: "codex-cli", model: null });
     expect(target).toEqual({ kind: "cli", provider: "codex-cli", model: null });
   });
@@ -261,17 +267,20 @@ describe("CLI runtime", () => {
 
   it("builds argument lists that only pass --model when a model is chosen", () => {
     expect(buildClaudeCliArgs("PROMPT", "opus")).toEqual([
-      "--strict-mcp-config", "--setting-sources", "", "--model", "opus", "-p", "PROMPT",
+      "--tools", "", "--permission-mode", "dontAsk", "--strict-mcp-config", "--setting-sources", "",
+      "--disable-slash-commands", "--no-session-persistence", "--model", "opus", "-p", "PROMPT",
     ]);
     expect(buildClaudeCliArgs("PROMPT", null)).not.toContain("--model");
-    expect(buildCodexCliArgs("PROMPT", "gpt-6-sol")).toEqual([
-      "exec", "--sandbox", "read-only", "--model", "gpt-6-sol", "PROMPT",
-    ]);
-    expect(buildCodexCliArgs("PROMPT", null)).toEqual(["exec", "--sandbox", "read-only", "PROMPT"]);
+    const codex = buildCodexCliArgs("PROMPT", "gpt-6-sol");
+    expect(codex.slice(0, 3)).toEqual(["exec", "--sandbox", "read-only"]);
+    expect(codex).toContain("--skip-git-repo-check");
+    expect(codex.slice(-3)).toEqual(["--model", "gpt-6-sol", "PROMPT"]);
+    expect(buildCodexCliArgs("PROMPT", null)).not.toContain("--model");
   });
 
   it("routes a CLI target through the local binary with system and user prompt combined", async () => {
     process.env.AI_SETTER_CODEX_BIN = "/usr/local/bin/codex";
+    process.env[CODEX_CLI_ENV] = "on";
     mocks.execFile.mockImplementation((_bin, _args, _opts, callback) =>
       callback(null, { stdout: '{"reply":"hey"}', stderr: "" })
     );
@@ -281,9 +290,38 @@ describe("CLI runtime", () => {
       model: "gpt-6-sol",
     });
     expect(output).toBe('{"reply":"hey"}');
-    const [bin, args] = mocks.execFile.mock.calls[0];
+    const [bin, args, options] = mocks.execFile.mock.calls[0];
     expect(bin).toBe("/usr/local/bin/codex");
-    expect(args).toEqual(["exec", "--sandbox", "read-only", "--model", "gpt-6-sol", "SYSTEM\n\nUSER"]);
+    expect(args.slice(-3)).toEqual(["--model", "gpt-6-sol", "SYSTEM\n\nUSER"]);
+    // Sandboxed: an empty working folder and none of the app's secrets.
+    expect(options.cwd).toMatch(/opensetter-cli-/);
+    expect(options.env.DATABASE_URL).toBeUndefined();
+  });
+
+  it("refuses the CLI and the server key for workspaces that aren't the operator's", async () => {
+    mocks.isOperator.mockResolvedValueOnce(false);
+    await expect(
+      resolveLlmTarget({ workspaceId: "ws_guest", provider: "claude-cli", model: null })
+    ).rejects.toBeInstanceOf(LlmConfigurationError);
+    mocks.isOperator.mockResolvedValueOnce(false);
+    await expect(
+      resolveLlmTarget({ workspaceId: "ws_guest", provider: null, model: null })
+    ).rejects.toBeInstanceOf(LlmConfigurationError);
+  });
+
+  it("keeps Codex off unless the operator opts in", async () => {
+    delete process.env[CODEX_CLI_ENV];
+    await expect(
+      resolveLlmTarget({ workspaceId: "ws_1", provider: "codex-cli", model: null })
+    ).rejects.toBeInstanceOf(LlmConfigurationError);
+  });
+
+  it("passes the CLI only PATH, HOME, locale and its own config", () => {
+    const env = cliEnvironment({
+      PATH: "/bin", HOME: "/Users/x", LANG: "de_DE.UTF-8", CLAUDE_CONFIG_DIR: "/c",
+      DATABASE_URL: "postgres://u:p@h/db", ENCRYPTION_KEY: "abc", INSTAGRAM_APP_SECRET: "s", NEXTAUTH_SECRET: "n",
+    });
+    expect(env).toEqual({ PATH: "/bin", HOME: "/Users/x", LANG: "de_DE.UTF-8", CLAUDE_CONFIG_DIR: "/c" });
   });
 
   it("describes the env CLI default without pretending it is a fixed model", () => {

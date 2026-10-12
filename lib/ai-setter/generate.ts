@@ -10,7 +10,22 @@ import {
   isReplyLanguageCompatible,
   type ChatLanguage,
 } from "./language";
-import { resolveLlmTarget, type LlmSelection } from "./providers/resolve";
+import { requireSelection, resolveLlmTarget, type LlmSelection } from "./providers/resolve";
+import { isOperatorWorkspace } from "./operator";
+import { containsSecretMaterial, redactSecretValues } from "./secret-guard";
+import type { DraftReply as GuardedDraft } from "./types";
+
+/** A draft carrying secret material is redacted and always held for review. */
+function guardSecrets(draft: GuardedDraft): GuardedDraft {
+  if (!containsSecretMaterial(draft.reply)) return draft;
+  return {
+    ...draft,
+    reply: redactSecretValues(draft.reply),
+    shouldSend: false,
+    needsReview: true,
+    reasons: [...draft.reasons, "draft contained secret-looking material and was redacted"],
+  };
+}
 import {
   buildNudgeUserPrompt,
   buildSetterSystemPrompt,
@@ -149,12 +164,12 @@ export async function generateSetterDraft(
   const chatLanguage = params.chatLanguage ?? "unknown";
   // Resolve the provider first: a misconfigured selection fails the job
   // before any retrieval work is spent.
-  const target = params.config.llmSelection
-    ? await resolveLlmTarget(params.config.llmSelection)
-    : null;
+  const target = await resolveLlmTarget(requireSelection(params.config.llmSelection));
 
+  const knowledgeAllowed =
+    params.config.knowledgeEnabled && (await isOperatorWorkspace(params.config.llmSelection?.workspaceId));
   const [knowledgeContext, styleExamples, corpusExamples] = await Promise.all([
-    params.config.knowledgeEnabled
+    knowledgeAllowed
       ? fetchKnowledgeContext(knowledgeQuery).catch(() => "")
       : Promise.resolve(""),
     params.config.styleExamplesEnabled
@@ -183,7 +198,7 @@ export async function generateSetterDraft(
   const system = buildSetterSystemPrompt(params.config);
   const userPrompt = buildSetterUserPrompt(context);
   const raw = await completeSetterPrompt(system, userPrompt, target);
-  return enforceDraftLanguage(extractDraftReply(raw), chatLanguage);
+  return guardSecrets(enforceDraftLanguage(extractDraftReply(raw), chatLanguage));
 }
 
 /**
@@ -200,10 +215,10 @@ export async function generateWindowNudge(params: {
   config: GenerateDraftParams["config"];
 }): Promise<DraftReply> {
   const chatLanguage = params.chatLanguage ?? "unknown";
-  const target = params.config.llmSelection
-    ? await resolveLlmTarget(params.config.llmSelection)
-    : null;
-  const knowledgeContext = params.config.knowledgeEnabled
+  const target = await resolveLlmTarget(requireSelection(params.config.llmSelection));
+  const knowledgeAllowed =
+    params.config.knowledgeEnabled && (await isOperatorWorkspace(params.config.llmSelection?.workspaceId));
+  const knowledgeContext = knowledgeAllowed
     ? await fetchKnowledgeContext(
         buildKnowledgeQuery(params.history, null, params.participantUsername)
       ).catch(() => "")
@@ -227,5 +242,5 @@ export async function generateWindowNudge(params: {
   const system = buildSetterSystemPrompt(params.config);
   const userPrompt = buildNudgeUserPrompt(context, params.quietHours);
   const raw = await completeSetterPrompt(system, userPrompt, target);
-  return enforceDraftLanguage(extractDraftReply(raw), chatLanguage);
+  return guardSecrets(enforceDraftLanguage(extractDraftReply(raw), chatLanguage));
 }

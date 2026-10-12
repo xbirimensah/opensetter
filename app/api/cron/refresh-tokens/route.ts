@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rejectUnauthorizedCron } from "@/lib/cron-auth";
 import { prisma } from "@/lib/db/client";
 import { decryptToken, encryptToken } from "@/lib/meta/oauth";
 import { refreshLongLivedToken } from "@/lib/meta/client";
@@ -6,15 +7,8 @@ import { refreshLongLivedToken } from "@/lib/meta/client";
 const DAYS_BEFORE_EXPIRY = 10;
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET || process.env.NEXTAUTH_SECRET;
-
-  if (authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized" },
-      { status: 401 }
-    );
-  }
+  const rejected = rejectUnauthorizedCron(request);
+  if (rejected) return rejected;
 
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() + DAYS_BEFORE_EXPIRY);

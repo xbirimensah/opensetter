@@ -18,16 +18,16 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
-    "@auth/prisma-adapter": "^2.11.2",
+    "@auth/prisma-adapter": "^2.11.3",
     "@huggingface/transformers": "^4.2.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@vercel/analytics": "^2.0.1",
+    "@xyflow/react": "^12.12.0",
     "better-sqlite3": "^13.0.2",
     "bullmq": "^5.76.4",
     "ioredis": "^5.10.1",
-    "next": "^16.2.6",
-    "next-auth": "^5.0.0-beta.31",
+    "next": "^16.3.8",
+    "next-auth": "^5.0.0-beta.32",
     "pg": "^8.20.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -43,11 +43,26 @@
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "^16.2.6",
+    "eslint-config-next": "^16.3.8",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "tsx": "^4.22.1",
     "typescript": "^5",
     "vitest": "^4.1.5"
+  },
+  "overrides": {
+    "@auth/core": "^0.41.3"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.0": true,
+    "better-sqlite3@13.0.2": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true,
+    "msgpackr-extract@3.0.3": true,
+    "onnxruntime-node@1.30.0": true,
+    "prisma@7.10.0": true,
+    "protobufjs@7.6.6": true,
+    "unrs-resolver@1.11.1": true,
+    "sharp@0.35.5": true
   }
 }

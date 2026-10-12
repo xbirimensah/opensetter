@@ -1,16 +1,35 @@
 import NextAuth, { type NextAuthConfig } from "next-auth";
+import { audit } from "@/lib/audit";
 import Credentials from "next-auth/providers/credentials";
 import Resend from "next-auth/providers/resend";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/db/client";
 import { burnPasswordCheck, verifyPassword } from "@/lib/password";
-import { clearLoginFailures, isLoginThrottled, recordLoginFailure } from "@/lib/login-throttle";
+import { clearAttempts, clientIp, registerAttempt } from "@/lib/login-throttle";
+import { isEmailAllowedToSignIn } from "@/lib/signup-policy";
 import { ensureWorkspaceForUser, getPrimaryWorkspace } from "@/lib/workspace";
 
 type AdapterPrismaClient = Parameters<typeof PrismaAdapter>[0];
 
-/** Sessions last 90 days and roll forward on use, so logging in is rare. */
-const SESSION_MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
+/** Sessions last 30 days and roll forward on use, so logging in is rare. */
+const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * Proof that a session refresh came from this server's password-change
+ * route (via unstable_update), not from a client posting to
+ * /api/auth/session: an HMAC over the user and the new password time.
+ */
+export function sessionRestampProof(userId: string, passwordUpdatedAt: Date): string {
+  return createHmac("sha256", process.env.NEXTAUTH_SECRET ?? "")
+    .update(`restamp:${userId}:${passwordUpdatedAt.getTime()}`)
+    .digest("hex");
+}
+
+function proofMatches(given: unknown, expected: string): boolean {
+  if (typeof given !== "string" || given.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+}
 
 export function normalizeLoginEmail(raw: unknown): string {
   return String(raw ?? "").trim().toLowerCase();
@@ -21,12 +40,16 @@ export function normalizeLoginEmail(raw: unknown): string {
  * Settings can log in this way; new people still arrive by invite or
  * email link, so there is no open signup.
  */
-async function authorizePassword(raw: Partial<Record<"email" | "password", unknown>>) {
+async function authorizePassword(
+  raw: Partial<Record<"email" | "password", unknown>>,
+  request?: Request
+) {
   const email = normalizeLoginEmail(raw.email);
   const password = String(raw.password ?? "");
   if (!email || !password) return null;
-  // The login page checks this first to explain it; this is the backstop.
-  if (await isLoginThrottled(email)) return null;
+  // Counted before any password work, per email and per IP.
+  const ip = request ? clientIp(request.headers) : null;
+  if (!(await registerAttempt("login", { email, ip }))) return null;
 
   const user = await prisma.user.findUnique({
     where: { email },
@@ -34,14 +57,15 @@ async function authorizePassword(raw: Partial<Record<"email" | "password", unkno
   });
   if (!user?.passwordHash) {
     await burnPasswordCheck(password);
-    await recordLoginFailure(email);
+    await audit({ action: "auth.password_login_failed", ip, level: "WARNING", detail: { email } });
     return null;
   }
   if (!(await verifyPassword(password, user.passwordHash))) {
-    await recordLoginFailure(email);
+    await audit({ action: "auth.password_login_failed", actorUserId: user.id, ip, level: "WARNING", detail: { email } });
     return null;
   }
-  await clearLoginFailures(email);
+  await clearAttempts("login", email);
+  await audit({ action: "auth.password_login", actorUserId: user.id, ip });
   return { id: user.id, email: user.email, name: user.name, image: user.image };
 }
 
@@ -61,14 +85,16 @@ export const authConfig = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user, trigger }) {
+    async signIn({ user, account }) {
+      // Password logins only ever match an existing user (authorize).
+      if (account?.provider !== "resend") return true;
+      // No email link, and so no new account, for strangers.
+      return isEmailAllowedToSignIn(user.email);
+    },
+    async jwt({ token, user, trigger, session }) {
       if (user?.id) {
         // Sign-in: remember when, so a later password change can end it.
         return { ...token, sub: user.id, authAt: Date.now() };
-      }
-      if (trigger === "update") {
-        // The user just changed their password on this device: keep it.
-        return { ...token, authAt: Date.now() };
       }
       if (!token.sub) return null;
       // Sessions are checked against the database on every request (as the
@@ -79,6 +105,17 @@ export const authConfig = {
         select: { passwordUpdatedAt: true },
       });
       if (!row) return null;
+      if (
+        trigger === "update" &&
+        row.passwordUpdatedAt &&
+        proofMatches(
+          (session as { restamp?: unknown } | undefined)?.restamp,
+          sessionRestampProof(token.sub, row.passwordUpdatedAt)
+        )
+      ) {
+        // This device just changed the password: keep it signed in.
+        return { ...token, authAt: Date.now() };
+      }
       const authAt = typeof token.authAt === "number" ? token.authAt : 0;
       if (row.passwordUpdatedAt && row.passwordUpdatedAt.getTime() > authAt) return null;
       return token;

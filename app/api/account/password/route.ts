@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { audit } from "@/lib/audit";
 import { z } from "zod";
 import { prisma } from "@/lib/db/client";
-import { getCurrentUserId, unstable_update } from "@/lib/auth";
-import { clearLoginFailures, isLoginThrottled, recordLoginFailure } from "@/lib/login-throttle";
+import { getCurrentUserId, sessionRestampProof, unstable_update } from "@/lib/auth";
+import { clearAttempts, clientIp, registerAttempt } from "@/lib/login-throttle";
 import { hashPassword, MAX_PASSWORD_LENGTH, passwordProblem, verifyPassword } from "@/lib/password";
 
 export const runtime = "nodejs";
@@ -54,21 +55,28 @@ export async function POST(request: NextRequest) {
 
   if (user.passwordHash) {
     const email = user.email ?? userId;
-    if (await isLoginThrottled(email)) return fail("Too many attempts. Try again later.", 429);
+    const allowed = await registerAttempt("password-change", { email, ip: clientIp(request.headers) });
+    if (!allowed) return fail("Too many attempts. Try again later.", 429);
     if (!currentPassword || !(await verifyPassword(currentPassword, user.passwordHash))) {
-      await recordLoginFailure(email);
       return fail("Your current password is not right.", 400);
     }
-    await clearLoginFailures(email);
+    await clearAttempts("password-change", email);
   }
 
+  const passwordUpdatedAt = new Date();
   await prisma.user.update({
     where: { id: userId },
-    data: { passwordHash: await hashPassword(newPassword), passwordUpdatedAt: new Date() },
+    data: { passwordHash: await hashPassword(newPassword), passwordUpdatedAt },
   });
-  // Re-stamp this device's session after passwordUpdatedAt, so only the
-  // other devices are signed out.
-  await unstable_update({});
+  // Re-stamp this device's session with a server-signed proof, so only the
+  // other devices are signed out (a client can't forge this refresh).
+  await unstable_update({ restamp: sessionRestampProof(userId, passwordUpdatedAt) } as never);
+  await audit({
+    action: "auth.password_changed",
+    actorUserId: userId,
+    ip: clientIp(request.headers),
+    detail: { firstPassword: !user.passwordHash },
+  });
 
   return NextResponse.json({ success: true, data: { hasPassword: true } });
 }

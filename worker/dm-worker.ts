@@ -6,6 +6,11 @@ import { recoverInterruptedSends } from "@/lib/ai-setter/send";
 import { logKnowledgeHealth } from "@/lib/ai-setter/knowledge";
 import { sweepFlowRuns } from "@/lib/flows/service";
 import os from "node:os";
+import { enforceEnvironment } from "@/lib/startup-checks";
+
+// Before anything connects: a production worker with missing or example
+// secrets refuses to start (see lib/startup-checks.ts).
+enforceEnvironment("worker");
 
 const worker = createDMWorker();
 const startedAt = new Date().toISOString();

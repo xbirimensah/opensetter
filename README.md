@@ -43,7 +43,7 @@ Everything OpenReply does is still here: keyword campaigns, tracked links, follo
 The fastest path is Docker (web + worker + Postgres + Redis in one command):
 
 ```bash
-git clone https://github.com/obirimensah05/opensetter.git
+git clone https://github.com/xbirimensah/opensetter.git
 cd opensetter
 ./scripts/setup.sh docker      # writes .env with generated secrets
 docker compose up -d --build

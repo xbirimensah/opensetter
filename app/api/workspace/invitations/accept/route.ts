@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const token = typeof body.token === "string" ? body.token : null;
+  const token = typeof body.token === "string" && body.token.length <= 128 ? body.token : null;
   if (!token) {
     return NextResponse.json(
       { success: false, error: "Missing invitation token" },

@@ -1,4 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+
+/** A manual DM from the inbox: Instagram-scoped ids are numeric, text is capped like Meta's. */
+const sendSchema = z.object({
+  instagramAccountId: z.string().max(64).optional().nullable(),
+  recipientId: z.string().regex(/^\d{1,32}$/, "Invalid recipient"),
+  text: z.string().min(1).max(1000),
+});
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import {
@@ -103,9 +111,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { instagramAccountId?: string; recipientId?: string; text?: string };
+  let body: z.infer<typeof sendSchema>;
   try {
-    body = await request.json();
+    const parsed = sendSchema.safeParse(await request.json());
+    if (!parsed.success) throw new Error("invalid");
+    body = parsed.data;
   } catch {
     return NextResponse.json(
       { success: false, error: "Invalid request body" },
@@ -113,8 +123,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const text = body.text?.trim();
-  if (!body.recipientId || !text) {
+  const text = body.text.trim();
+  if (!text) {
     return NextResponse.json(
       { success: false, error: "A recipient and message are required." },
       { status: 400 }

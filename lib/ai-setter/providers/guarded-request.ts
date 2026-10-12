@@ -65,20 +65,44 @@ export function postJsonGuarded(
 ): Promise<GuardedResponse> {
   const check = validateProviderBaseUrl(url, { allowPrivate: options.allowPrivate });
   if (!check.ok) return Promise.reject(new Error(check.error));
+  return requestGuarded(url, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    timeoutMs: options.timeoutMs,
+    allowPrivate: options.allowPrivate,
+  });
+}
 
+/**
+ * One HTTP(S) request that checks the address the socket connects to,
+ * never follows redirects and stops reading past maxBytes. Callers
+ * validate the URL itself (scheme, host, port) first.
+ */
+export function requestGuarded(
+  url: string,
+  options: {
+    method: "GET" | "POST";
+    headers: Record<string, string>;
+    body?: string;
+    timeoutMs: number;
+    allowPrivate: boolean;
+    maxBytes?: number;
+  }
+): Promise<GuardedResponse> {
   const target = new URL(url);
-  const body = JSON.stringify(payload);
   const transport = target.protocol === "http:" ? http : https;
+  const maxBytes = options.maxBytes ?? MAX_RESPONSE_BYTES;
+  const body = options.method === "POST" ? options.body ?? "" : undefined;
 
   return new Promise((resolve, reject) => {
     const request = transport.request(
       target,
       {
-        method: "POST",
+        method: options.method,
         headers: {
-          ...headers,
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body).toString(),
+          ...options.headers,
+          ...(body !== undefined ? { "Content-Length": Buffer.byteLength(body).toString() } : {}),
         },
         lookup: guardedLookup(options.allowPrivate),
         timeout: options.timeoutMs,
@@ -87,26 +111,28 @@ export function postJsonGuarded(
         const status = response.statusCode ?? 0;
         if (status >= 300 && status < 400) {
           response.resume();
-          reject(new Error(`Provider answered with a redirect (${status}); redirects are not followed`));
+          reject(new Error(`Answered with a redirect (${status}); redirects are not followed`));
           return;
         }
         const chunks: Buffer[] = [];
         let size = 0;
         response.on("data", (chunk: Buffer) => {
           size += chunk.length;
-          if (size > MAX_RESPONSE_BYTES) {
-            request.destroy(new Error("Provider response too large"));
+          if (size > maxBytes) {
+            request.destroy(new Error("Response too large"));
             return;
           }
           chunks.push(chunk);
         });
-        response.on("end", () =>
-          resolve({ status, body: Buffer.concat(chunks).toString("utf8") })
-        );
+        response.on("end", () => resolve({ status, body: Buffer.concat(chunks).toString("utf8") }));
         response.on("error", reject);
       }
     );
-    request.on("timeout", () => request.destroy(new Error("Provider request timed out")));
+    // "timeout" is per idle socket; this caps the whole exchange, so a server
+    // dripping bytes slowly can't hold the request open forever.
+    const deadline = setTimeout(() => request.destroy(new Error("Request timed out")), options.timeoutMs);
+    request.on("close", () => clearTimeout(deadline));
+    request.on("timeout", () => request.destroy(new Error("Request timed out")));
     request.on("error", reject);
     request.end(body);
   });

@@ -11,6 +11,9 @@
  */
 
 import { execFile } from "child_process";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
   CLI_PROVIDER_IDS,
   isValidCliModelId,
@@ -57,6 +60,44 @@ export function cliProvidersEnabled(): boolean {
   return (process.env[CLI_PROVIDERS_ENV] ?? "").trim().toLowerCase() !== "off";
 }
 
+/**
+ * Codex always has a shell tool, and its read-only sandbox still reads the
+ * whole disk (including this app's .env), so a prompt-injected DM could
+ * exfiltrate secrets. It stays off unless the operator opts in.
+ */
+export const CODEX_CLI_ENV = "AI_SETTER_CODEX_CLI";
+export function codexCliEnabled(): boolean {
+  return (process.env[CODEX_CLI_ENV] ?? "").trim().toLowerCase() === "on";
+}
+
+/**
+ * The CLIs read untrusted DM text, so they run with only what they need:
+ * PATH/HOME/locale plus their own config variables, never the app's
+ * secrets (database URL, encryption keys, Meta secrets). Their login
+ * lives in HOME (and the macOS keychain), which stays reachable.
+ */
+const CLI_ENV_KEYS = ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TERM"];
+const CLI_ENV_PREFIXES = ["CLAUDE_", "CODEX_", "ANTHROPIC_", "OPENAI_"];
+export function cliEnvironment(
+  source: Record<string, string | undefined> = process.env
+): NodeJS.ProcessEnv {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value === undefined) continue;
+    if (CLI_ENV_KEYS.includes(key) || CLI_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+      env[key] = value;
+    }
+  }
+  return env as NodeJS.ProcessEnv;
+}
+
+/** An empty folder as the CLIs' working directory, so nothing nearby is in reach. */
+let cliWorkdir: string | null = null;
+export function cliWorkingDirectory(): string {
+  cliWorkdir ??= mkdtempSync(join(tmpdir(), "opensetter-cli-"));
+  return cliWorkdir;
+}
+
 export function resolveCliBin(provider: CliProviderId): string {
   const definition = CLI_CATALOG[provider];
   return process.env[definition.binEnv]?.trim() || definition.defaultBin;
@@ -64,9 +105,18 @@ export function resolveCliBin(provider: CliProviderId): string {
 
 export function buildClaudeCliArgs(prompt: string, model: string | null): string[] {
   return [
+    // No tools at all: the model only writes text, it cannot read files,
+    // run commands or fetch URLs, whatever a DM tells it to do.
+    "--tools",
+    "",
+    "--permission-mode",
+    "dontAsk",
     "--strict-mcp-config",
     "--setting-sources",
     "",
+    "--disable-slash-commands",
+    // DMs are not written to the CLI's session history on disk.
+    "--no-session-persistence",
     ...(model ? ["--model", model] : []),
     "-p",
     prompt,
@@ -74,7 +124,17 @@ export function buildClaudeCliArgs(prompt: string, model: string | null): string
 }
 
 export function buildCodexCliArgs(prompt: string, model: string | null): string[] {
-  return ["exec", "--sandbox", "read-only", ...(model ? ["--model", model] : []), prompt];
+  return [
+    "exec",
+    "--sandbox",
+    "read-only",
+    "--cd",
+    cliWorkingDirectory(),
+    "--skip-git-repo-check",
+    "--ephemeral",
+    ...(model ? ["--model", model] : []),
+    prompt,
+  ];
 }
 
 // ─── discovery ──────────────────────────────────────────────────────────────
@@ -104,7 +164,7 @@ const defaultRunner: CliCommandRunner = (bin, args, options) =>
     execFile(
       bin,
       args,
-      { timeout: options.timeoutMs, maxBuffer: options.maxBuffer, env: process.env },
+      { timeout: options.timeoutMs, maxBuffer: options.maxBuffer, env: cliEnvironment(), cwd: cliWorkingDirectory() },
       (error, stdout, stderr) => {
         const out = typeof stdout === "string" ? stdout : String(stdout ?? "");
         const err = typeof stderr === "string" ? stderr : String(stderr ?? "");

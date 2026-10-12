@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db/client", () => ({ prisma: mocks.prisma }));
+vi.mock("@/lib/ai-setter/operator", () => ({ isOperatorWorkspace: async () => true }));
 
 import {
   CREDENTIALS_KEY_ENV,

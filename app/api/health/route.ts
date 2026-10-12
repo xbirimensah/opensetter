@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { getDMQueue, getRedisConnection } from "@/lib/queue/client";
@@ -56,7 +57,27 @@ async function checkQueue(): Promise<HealthCheck & { counts?: unknown }> {
   }
 }
 
-export async function GET() {
+/**
+ * Details (process id, host name, queue counts, error text) only for the
+ * server itself or a caller holding HEALTH_TOKEN. Requests that came in
+ * through Cloudflare or another proxy carry forwarding headers and get
+ * just the status, so the public URL reveals nothing about the machine.
+ */
+function mayShowDetails(request: Request): boolean {
+  const token = process.env.HEALTH_TOKEN;
+  const given = request.headers.get("x-health-token");
+  if (token && given && token.length === given.length) {
+    if (timingSafeEqual(Buffer.from(token), Buffer.from(given))) return true;
+  }
+  const forwarded = ["cf-connecting-ip", "x-forwarded-for", "x-real-ip", "forwarded"].some((name) =>
+    request.headers.has(name)
+  );
+  if (forwarded) return false;
+  const host = new URL(request.url).hostname;
+  return host === "127.0.0.1" || host === "localhost" || host === "::1";
+}
+
+export async function GET(request: Request) {
   const [database, redis, queue, worker] = await Promise.all([
     checkDatabase(),
     checkRedis(),
@@ -74,6 +95,10 @@ export async function GET() {
     redis.status === "ok" &&
     queue.status === "ok" &&
     worker.healthy;
+
+  if (!mayShowDetails(request)) {
+    return NextResponse.json({ status: healthy ? "ok" : "degraded" }, { status: healthy ? 200 : 503 });
+  }
 
   return NextResponse.json(
     {

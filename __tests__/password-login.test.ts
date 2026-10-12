@@ -15,27 +15,29 @@ vi.mock("next-auth/providers/resend", () => ({
 }));
 vi.mock("@/lib/workspace", () => ({ ensureWorkspaceForUser: vi.fn(), getPrimaryWorkspace: vi.fn() }));
 const throttle = { throttled: false };
-const recordLoginFailure = vi.fn();
+const registerAttempt = vi.fn(async () => !throttle.throttled);
 vi.mock("@/lib/login-throttle", () => ({
-  isLoginThrottled: async () => throttle.throttled,
-  recordLoginFailure,
-  clearLoginFailures: vi.fn(),
+  registerAttempt,
+  isThrottled: async () => throttle.throttled,
+  clearAttempts: vi.fn(),
+  clientIp: (headers: Headers) => headers.get("cf-connecting-ip"),
   LOGIN_THROTTLE_MINUTES: 15,
 }));
+vi.mock("@/lib/signup-policy", () => ({ isEmailAllowedToSignIn: async () => true }));
 
 const { hashPassword, verifyPassword, passwordProblem } = await import("@/lib/password");
-const { authConfig } = await import("@/lib/auth");
+const { authConfig, sessionRestampProof } = await import("@/lib/auth");
 
 type Jwt = (args: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
 const jwt = authConfig.callbacks.jwt as unknown as Jwt;
 const passwordProvider = authConfig.providers[0] as unknown as {
-  options: { authorize: (c: Record<string, unknown>) => Promise<unknown> };
+  options: { authorize: (c: Record<string, unknown>, r?: Request) => Promise<unknown> };
 };
-const authorize = (c: Record<string, unknown>) => passwordProvider.options.authorize(c);
+const authorize = (c: Record<string, unknown>, r?: Request) => passwordProvider.options.authorize(c, r);
 
 beforeEach(() => {
   findUnique.mockReset();
-  recordLoginFailure.mockReset();
+  registerAttempt.mockClear();
   throttle.throttled = false;
 });
 
@@ -75,8 +77,10 @@ describe("password authorize", () => {
       id: "u1", email: "max@example.de", name: null, image: null,
       passwordHash: await hashPassword("a strong password"),
     });
-    expect(await authorize({ email: "max@example.de", password: "wrong password" })).toBeNull();
-    expect(recordLoginFailure).toHaveBeenCalledWith("max@example.de");
+    const request = new Request("https://app.test", { headers: { "cf-connecting-ip": "203.0.113.7" } });
+    expect(await authorize({ email: "max@example.de", password: "wrong password" }, request)).toBeNull();
+    // Counted per email and per client IP before any password work.
+    expect(registerAttempt).toHaveBeenCalledWith("login", { email: "max@example.de", ip: "203.0.113.7" });
 
     findUnique.mockResolvedValue({ id: "u2", email: "a@b.de", name: null, image: null, passwordHash: null });
     expect(await authorize({ email: "a@b.de", password: "anything at all" })).toBeNull();
@@ -102,7 +106,19 @@ describe("session rules", () => {
   it("ends sessions of deleted users and keeps the device that changed the password", async () => {
     findUnique.mockResolvedValue(null);
     expect(await jwt({ token: { sub: "gone", authAt: 1 } })).toBeNull();
-    const updated = await jwt({ token: { sub: "u1", authAt: 1 }, trigger: "update" });
-    expect((updated?.authAt as number) > 1).toBe(true);
+    const changedAt = new Date(5_000);
+    findUnique.mockResolvedValue({ passwordUpdatedAt: changedAt });
+    const updated = await jwt({
+      token: { sub: "u1", authAt: 1 },
+      trigger: "update",
+      session: { restamp: sessionRestampProof("u1", changedAt) },
+    });
+    expect((updated?.authAt as number) > 5_000).toBe(true);
+  });
+
+  it("won't revive a session from before a password change through a client update", async () => {
+    findUnique.mockResolvedValue({ passwordUpdatedAt: new Date(5_000) });
+    expect(await jwt({ token: { sub: "u1", authAt: 1 }, trigger: "update", session: {} })).toBeNull();
+    expect(await jwt({ token: { sub: "u1", authAt: 1 }, trigger: "update", session: { restamp: "forged" } })).toBeNull();
   });
 });

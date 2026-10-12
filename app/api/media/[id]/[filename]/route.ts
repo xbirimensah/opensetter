@@ -80,7 +80,11 @@ async function serve(request: NextRequest, { params }: RouteProps, withBody: boo
     ETag: etag,
     "Last-Modified": asset.createdAt.toUTCString(),
     "X-Content-Type-Options": "nosniff",
-    "Content-Disposition": `inline; filename="${asset.filename}"`,
+    // Opened directly, a file can never run script or load anything; Meta
+    // and the app still fetch it cross-origin.
+    "Content-Security-Policy": "sandbox; default-src 'none'",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+    "Content-Disposition": `inline; filename="${asset.filename.replace(/["\\\r\n]/g, "_")}"`,
   };
 
   if (request.headers.get("if-none-match") === etag) {

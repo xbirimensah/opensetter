@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/db/client";
 import { getDMQueue } from "@/lib/queue/client";
 import {
@@ -49,28 +50,65 @@ export async function GET(request: NextRequest) {
   );
 }
 
+/** Meta's webhook batches are small; anything near this is not from Meta. */
+const MAX_WEBHOOK_BYTES = 1024 * 1024;
+/** At most one "bad signature" event per minute, so junk can't flood the table. */
+const SIGNATURE_FAILURE_LOG_INTERVAL_MS = 60_000;
+let lastSignatureFailureLogAt = 0;
+let unloggedSignatureFailures = 0;
+
+/** Read the body but stop past the cap (chunked requests have no length). */
+async function readBodyCapped(request: NextRequest, maxBytes: number): Promise<string | null> {
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** The envelope every Instagram webhook has; the parsers handle the rest. */
+const webhookEnvelope = z.object({
+  object: z.string().max(64),
+  entry: z.array(z.record(z.string(), z.unknown())).max(1000),
+});
+
 export async function POST(request: NextRequest) {
-  const rawBody = await request.text();
+  const rawBody = await readBodyCapped(request, MAX_WEBHOOK_BYTES);
+  if (rawBody === null) {
+    return NextResponse.json({ success: false, error: "Payload too large" }, { status: 413 });
+  }
   const signature = request.headers.get("x-hub-signature-256");
 
   if (!verifyWebhookSignature(rawBody, signature)) {
-    // Record the attempt so a signature mismatch is visible rather than a
-    // silent 401. This is the common symptom of FACEBOOK_APP_SECRET being
-    // set to the wrong app's secret for the webhook's signing key.
-    await prisma.operationalEvent
-      .create({
-        data: {
-          source: "SYSTEM",
-          level: "WARNING",
-          message: "Webhook signature verification failed",
-          payload: {
-            hadSignatureHeader: Boolean(signature),
-            bodyLength: rawBody.length,
-            bodyPreview: rawBody.slice(0, 200),
+    // Record mismatches so a wrong FACEBOOK_APP_SECRET is visible rather
+    // than a silent 401, but at most once a minute and without any of the
+    // (unauthenticated) body.
+    unloggedSignatureFailures += 1;
+    if (Date.now() - lastSignatureFailureLogAt > SIGNATURE_FAILURE_LOG_INTERVAL_MS) {
+      lastSignatureFailureLogAt = Date.now();
+      const failures = unloggedSignatureFailures;
+      unloggedSignatureFailures = 0;
+      await prisma.operationalEvent
+        .create({
+          data: {
+            source: "SYSTEM",
+            level: "WARNING",
+            message: "Webhook signature verification failed",
+            payload: { hadSignatureHeader: Boolean(signature), bodyLength: rawBody.length, failures },
           },
-        },
-      })
-      .catch(() => {});
+        })
+        .catch(() => {});
+    }
     return NextResponse.json(
       { success: false, error: "Invalid signature" },
       { status: 401 }
@@ -85,6 +123,9 @@ export async function POST(request: NextRequest) {
       { success: false, error: "Invalid JSON" },
       { status: 400 }
     );
+  }
+  if (!webhookEnvelope.safeParse(payload).success) {
+    return NextResponse.json({ success: false, error: "Unexpected payload shape" }, { status: 400 });
   }
 
   const webhookEvent = await prisma.webhookEvent.create({

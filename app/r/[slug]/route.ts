@@ -39,5 +39,9 @@ export async function GET(request: NextRequest, { params }: RedirectRouteProps) 
     },
   });
 
+  // Links saved before http(s)-only validation are refused rather than followed.
+  if (!/^https?:\/\//i.test(trackedLink.destinationUrl)) {
+    return NextResponse.redirect(new URL("/", request.url), { status: 302 });
+  }
   return NextResponse.redirect(trackedLink.destinationUrl, { status: 302 });
 }
