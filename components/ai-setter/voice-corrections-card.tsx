@@ -7,11 +7,8 @@
 
 import { useEffect, useState } from "react";
 import { INPUT_CLASS, LABEL_CLASS, formatDateTime } from "./form";
-
-interface Contact {
-  participantId: string;
-  participantUsername: string | null;
-}
+import ContactPicker from "./contact-picker";
+import { contactLabel, type PickerContact as Contact } from "@/lib/ai-setter/contact-filter";
 
 interface Correction {
   id: string;
@@ -21,12 +18,6 @@ interface Correction {
   note: string | null;
   createdAt: string;
   conversation: { participantId: string; participantUsername: string | null };
-}
-
-function contactName(contact: { participantId: string; participantUsername: string | null }): string {
-  return contact.participantUsername
-    ? `@${contact.participantUsername}`
-    : `user ${contact.participantId.slice(-6)}`;
 }
 
 async function fetchCorrections(accountId: string): Promise<Correction[] | null> {
@@ -53,7 +44,7 @@ async function fetchContacts(accountId: string): Promise<Contact[] | null> {
         participantId: conversation.participantId,
         participantUsername: conversation.participantUsername,
       }))
-      .sort((a, b) => contactName(a).localeCompare(contactName(b)));
+      .sort((a, b) => contactLabel(a).localeCompare(contactLabel(b)));
   } catch {
     return null;
   }
@@ -147,21 +138,7 @@ export default function VoiceCorrectionsCard({ accountId }: { accountId: string 
         a held draft are added here automatically.
       </p>
 
-      <label className="mt-4 block">
-        <span className={LABEL_CLASS}>Contact</span>
-        <select
-          value={participantId}
-          onChange={(e) => setParticipantId(e.target.value)}
-          className={INPUT_CLASS}
-        >
-          <option value="">All contacts (pick one to add)</option>
-          {contacts.map((contact) => (
-            <option key={contact.participantId} value={contact.participantId}>
-              {contactName(contact)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <ContactPicker contacts={contacts} value={participantId} onChange={setParticipantId} />
 
       {participantId && (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -221,7 +198,7 @@ export default function VoiceCorrectionsCard({ accountId }: { accountId: string 
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 text-sm">
                   <p className="text-footnote text-faint">
-                    {contactName(item.conversation)} ·{" "}
+                    {contactLabel(item.conversation)} ·{" "}
                     {item.kind === "EDIT" ? "from an edited draft" : "added by hand"} ·{" "}
                     {formatDateTime(item.createdAt)}
                   </p>
