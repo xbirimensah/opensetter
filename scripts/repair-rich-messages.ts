@@ -15,10 +15,14 @@
  *     gets its kind, card text and buttons.
  *  3. Downloads media (MEDIA_DIR) for every repaired row that has any.
  *
+ * Rows the backfill mirrored from Graph as kind "unsupported" (voice notes
+ * etc. that never reached the mirror via webhook) also go through pass 2:
+ * if a stored webhook delivered them, it describes them properly.
+ *
  * Usage (from the app folder, with its .env):
  *   npx tsx --env-file=.env scripts/repair-rich-messages.ts [--dry-run] [--skip-graph]
  *
- * Safe to re-run: only rows whose text is still "[media]" are touched.
+ * Safe to re-run: only rows still "[media]" or "unsupported" are touched.
  */
 
 import { prisma } from "@/lib/db/client";
@@ -37,12 +41,19 @@ import { captureMessageMedia } from "@/lib/media/inbound";
 const DRY_RUN = process.argv.includes("--dry-run");
 const SKIP_GRAPH = process.argv.includes("--skip-graph");
 
+/** Rows the inbox cannot show properly yet. */
+const NEEDS_REPAIR: Prisma.DmMessageWhereInput = {
+  OR: [{ text: "[media]" }, { kind: "unsupported" }],
+};
+
 async function applyRepair(mid: string, normalized: NormalizedDm): Promise<boolean> {
   const row = await prisma.dmMessage.findUnique({
     where: { mid },
-    select: { id: true, conversationId: true, text: true },
+    select: { id: true, conversationId: true, text: true, kind: true },
   });
-  if (!row || row.text !== "[media]") return false;
+  if (!row || (row.text !== "[media]" && row.kind !== "unsupported")) return false;
+  // An "unsupported" row only changes when the payload says more.
+  if (row.kind === "unsupported" && normalized.kind === "unsupported") return false;
   if (DRY_RUN) {
     console.log(`  would repair ${mid.slice(0, 24)}… → ${normalized.kind}: ${normalized.text.slice(0, 60).replace(/\n/g, " / ")}`);
     return true;
@@ -106,7 +117,7 @@ interface RawMessaging {
 
 async function webhookPass(): Promise<number> {
   const remaining = await prisma.dmMessage.findMany({
-    where: { text: "[media]" },
+    where: NEEDS_REPAIR,
     select: { mid: true },
   });
   if (remaining.length === 0) return 0;
@@ -144,15 +155,15 @@ async function webhookPass(): Promise<number> {
 }
 
 async function main() {
-  const before = await prisma.dmMessage.count({ where: { text: "[media]" } });
-  console.log(`${before} "[media]" row(s) to repair${DRY_RUN ? " (dry run)" : ""}`);
+  const before = await prisma.dmMessage.count({ where: NEEDS_REPAIR });
+  console.log(`${before} "[media]" or "unsupported" row(s) to repair${DRY_RUN ? " (dry run)" : ""}`);
   // Graph first for fresh CDN URLs (photos and videos still download).
   // Graph cannot describe voice notes, view-once media or forwarded
   // stories (bare is_unsupported); those are skipped there and repaired
   // from the stored webhook that delivered them.
   const viaGraph = SKIP_GRAPH ? 0 : await graphPass();
   const viaWebhook = await webhookPass();
-  const after = await prisma.dmMessage.count({ where: { text: "[media]" } });
+  const after = await prisma.dmMessage.count({ where: NEEDS_REPAIR });
   console.log(`Repaired ${viaGraph} via Graph API, ${viaWebhook} via stored webhooks; ${after} left`);
 }
 
