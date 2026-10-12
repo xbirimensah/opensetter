@@ -14,6 +14,7 @@
  * Pure and dependency-free apart from zod, so the editor runs it live.
  */
 
+import "@/lib/zod-config";
 import { z } from "zod";
 import {
   LIMITS,

@@ -50,6 +50,27 @@ function stripVersions(triggers: EditorTrigger[]): EditorTrigger[] {
   });
 }
 
+const SAVE_RETRY_DELAY_MS = 1000;
+
+/**
+ * A dropped connection (fetch throws) is retried once after a second. The
+ * whole draft is sent, so a retry re-applies the same state, with one
+ * exception: a comment trigger saved for the first time has no id yet, and
+ * if the lost attempt did reach the server, a retry would create it twice
+ * (double DMs). Those saves are not retried.
+ * HTTP errors are answers, not network failures, and are returned as is.
+ */
+async function putWithRetry(url: string, body: string, retryable: boolean): Promise<Response> {
+  const send = () => fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body });
+  try {
+    return await send();
+  } catch (error) {
+    if (!retryable) throw error;
+    await new Promise((resolve) => setTimeout(resolve, SAVE_RETRY_DELAY_MS));
+    return send();
+  }
+}
+
 export function useFlowDocument(flowId: string) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -206,11 +227,9 @@ export function useFlowDocument(flowId: string) {
       savingRef.current = true;
       setSaveState("saving");
       try {
-        const res = await fetch(`/api/flows/${flowId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
+        const triggers = body.triggers as EditorTrigger[];
+        const hasNewCommentTrigger = triggers.some((t) => t.type === "comment" && !t.automationId);
+        const res = await putWithRetry(`/api/flows/${flowId}`, JSON.stringify(body), !hasNewCommentTrigger);
         const payload = await res.json().catch(() => null);
         if (res.status === 409 && Array.isArray(payload?.conflicts)) {
           const conflicts = payload.conflicts as { clientId: string; trigger: CommentTrigger }[];
@@ -252,9 +271,10 @@ export function useFlowDocument(flowId: string) {
         setSaveState("saved");
         setSaveError(null);
         return { ok: true, validation };
-      } catch {
+      } catch (error) {
+        console.error("[flows] save failed:", error);
         setSaveState("error");
-        setSaveError("Could not reach the server. Your changes are still here.");
+        setSaveError("Could not reach the server. Your changes are still here: check your connection and try again.");
         if (mode === "auto") setFailedSnapshot(sentSnapshot);
         return { ok: false, error: "Could not reach the server" };
       } finally {
