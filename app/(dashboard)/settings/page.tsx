@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import type { AccountOption } from "@/components/account-select";
 import { InstagramConnectNotice } from "@/components/instagram-connect-notice";
+import PasswordSettings from "@/components/password-settings";
 
 interface SettingsData {
   workspace: {
@@ -217,6 +218,8 @@ export default function SettingsPage() {
           </a>
         </div>
       </section>
+
+      <PasswordSettings />
 
       <section className="panel rounded p-6">
         <h2 className="text-base font-semibold mb-6">Team</h2>

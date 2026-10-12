@@ -7,7 +7,7 @@ import {
 } from "crypto";
 import { getEncryptionKeyHex, requireEnv } from "@/lib/env";
 
-const INSTAGRAM_OAUTH_URL = "https://api.instagram.com/oauth/authorize";
+const INSTAGRAM_OAUTH_URL = "https://www.instagram.com/oauth/authorize";
 const INSTAGRAM_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16;
@@ -69,7 +69,11 @@ export function verifyOAuthState(state: string | null): OAuthStatePayload | null
   }
 }
 
-export function getAuthorizationUrl(redirectUri: string, state: string): string {
+export function getAuthorizationUrl(
+  redirectUri: string,
+  state: string,
+  options: { forceReauth?: boolean } = {}
+): string {
   const params = new URLSearchParams({
     client_id: requireEnv("INSTAGRAM_APP_ID"),
     redirect_uri: redirectUri,
@@ -78,6 +82,10 @@ export function getAuthorizationUrl(redirectUri: string, state: string): string 
     response_type: "code",
     state,
   });
+  // Instagram otherwise reuses whichever account is logged in on
+  // instagram.com, so "Connect another account" would silently reconnect
+  // the same one. force_reauth asks for the account's login every time.
+  if (options.forceReauth) params.set("force_reauth", "true");
 
   return `${INSTAGRAM_OAUTH_URL}?${params.toString()}`;
 }

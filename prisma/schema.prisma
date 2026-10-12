@@ -15,6 +15,11 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
+  /// scrypt hash for email + password login (lib/password.ts). Null until
+  /// the user sets a password in Settings; email links work either way.
+  passwordHash      String?
+  /// Sessions signed in before this moment end (lib/auth.ts jwt callback).
+  passwordUpdatedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

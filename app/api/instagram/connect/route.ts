@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db/client";
 import { canManageWorkspace, getCurrentWorkspaceContext } from "@/lib/workspace-access";
 import { getBaseUrl, getMissingInstagramOAuthEnv } from "@/lib/env";
 import { createOAuthState, getAuthorizationUrl } from "@/lib/meta/oauth";
@@ -26,6 +27,13 @@ export async function GET() {
 
   const redirectUri = `${getBaseUrl()}/api/instagram/callback`;
   const state = createOAuthState(context.workspaceId);
+  // With an account already connected, the owner is adding a different one:
+  // make Instagram ask which account to log in with.
+  const connectedCount = await prisma.instagramAccount.count({
+    where: { workspaceId: context.workspaceId },
+  });
 
-  return NextResponse.redirect(getAuthorizationUrl(redirectUri, state));
+  return NextResponse.redirect(
+    getAuthorizationUrl(redirectUri, state, { forceReauth: connectedCount > 0 })
+  );
 }

@@ -52,3 +52,5 @@ next-env.d.ts
 
 # Account-specific scripts (private URLs, handles): never published
 /scripts/local/
+/.next-*/
+/.design-shots/

@@ -4,6 +4,9 @@ function instagramGraphBase() {
   return `https://graph.instagram.com/${getMetaGraphApiVersion()}`;
 }
 
+// Meta documents the token endpoints without a version segment.
+const INSTAGRAM_TOKEN_BASE = "https://graph.instagram.com";
+
 function facebookGraphBase() {
   return `https://graph.facebook.com/${getMetaGraphApiVersion()}`;
 }
@@ -617,6 +620,20 @@ export async function getUserInfo(accessToken: string): Promise<InstagramUser> {
   return handleResponse<InstagramUser>(response);
 }
 
+/**
+ * Just what connecting an account needs. Kept to the basic fields: Meta
+ * rejects /me for some accounts when insight-style fields such as
+ * followers_count are asked for in the same call.
+ */
+export async function getAccountIdentity(accessToken: string): Promise<InstagramUser> {
+  const url = new URL(`${instagramGraphBase()}/me`);
+  url.searchParams.set("fields", "id,user_id,username,name");
+  url.searchParams.set("access_token", accessToken);
+
+  const response = await fetch(url.toString());
+  return handleResponse<InstagramUser>(response);
+}
+
 const MEDIA_FIELDS =
   "id,caption,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink,like_count,comments_count";
 
@@ -771,7 +788,7 @@ export async function getFollowerCountSeries(
 export async function getLongLivedToken(
   shortLivedToken: string
 ): Promise<{ accessToken: string; expiresIn: number }> {
-  const url = new URL(`${instagramGraphBase()}/access_token`);
+  const url = new URL(`${INSTAGRAM_TOKEN_BASE}/access_token`);
   url.searchParams.set("grant_type", "ig_exchange_token");
   url.searchParams.set("client_secret", requireEnv("INSTAGRAM_APP_SECRET"));
   url.searchParams.set("access_token", shortLivedToken);
@@ -788,7 +805,7 @@ export async function getLongLivedToken(
 export async function refreshLongLivedToken(
   longLivedToken: string
 ): Promise<{ accessToken: string; expiresIn: number }> {
-  const url = new URL(`${instagramGraphBase()}/refresh_access_token`);
+  const url = new URL(`${INSTAGRAM_TOKEN_BASE}/refresh_access_token`);
   url.searchParams.set("grant_type", "ig_refresh_token");
   url.searchParams.set("access_token", longLivedToken);
 

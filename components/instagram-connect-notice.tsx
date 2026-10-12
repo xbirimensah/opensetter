@@ -29,6 +29,12 @@ const MESSAGES: Record<string, { tone: Tone; title: string; detail: string }> = 
     detail:
       "Only workspace owners and admins can connect an Instagram account.",
   },
+  meta_rejected: {
+    tone: "error",
+    title: "Meta did not allow this account",
+    detail:
+      "Until your Meta app passes App Review, only accounts with a role on the app can connect. In the Meta App Dashboard open App roles, then Roles, add the account's exact username under Instagram testers, then accept the invite in Instagram (Settings and activity, Apps and websites, Tester invites). The account must be a Business or Creator account. Then connect again.",
+  },
   already_connected: {
     tone: "warning",
     title: "Account already connected",

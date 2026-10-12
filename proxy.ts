@@ -16,7 +16,6 @@ export function proxy(request: NextRequest) {
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
-  const isLogin = pathname === "/login";
   const isAuthenticated = hasSessionCookie(request);
 
   if (isProtected && !isAuthenticated) {
@@ -25,10 +24,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isLogin && isAuthenticated) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
-
+  // No "/login while logged in -> dashboard" shortcut here: a cookie can be
+  // present but no longer valid (expired, or from before the switch to JWT
+  // sessions), and the dashboard would bounce it straight back. The login
+  // page checks the session properly instead.
   return NextResponse.next();
 }
 
@@ -38,6 +37,5 @@ export const config = {
     "/automations/:path*",
     "/logs/:path*",
     "/settings/:path*",
-    "/login",
   ],
 };
