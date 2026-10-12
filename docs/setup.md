@@ -78,7 +78,7 @@ DATABASE_URL="postgresql://...proxy.rlwy.net.../railway" npm run db:migrate
 
 Note on crons: Vercel's free plan allows each cron to run at most once per day. The repo's crons are set to daily for that reason. The comment polling reconciler does not use a Vercel cron; it runs inside the Railway worker on its own interval, so the free plan is not a constraint there.
 
-Optional custom domain: if you want `openreply.yoursite.com` instead of the Vercel URL, add it in Vercel under Domains and make it primary. Then update `NEXTAUTH_URL` and the two Meta URLs (Step 7 and Step 8 below) to the new domain, and update the worker's `NEXTAUTH_URL` too, or tracked links in DMs will point at the old domain.
+Optional custom domain: if you want `opensetter.yoursite.com` instead of the Vercel URL, add it in Vercel under Domains and make it primary. Then update `NEXTAUTH_URL` and the two Meta URLs (Step 7 and Step 8 below) to the new domain, and update the worker's `NEXTAUTH_URL` too, or tracked links in DMs will point at the old domain.
 
 ## Environment variables
 
@@ -229,10 +229,10 @@ Or install them natively (macOS):
 brew install postgresql@16 redis
 brew services start postgresql@16
 brew services start redis
-createdb openreply
+createdb opensetter
 ```
 
-Then set `DATABASE_URL` to match your local user, for example `postgresql://YOUR_USER@localhost:5432/openreply`.
+Then set `DATABASE_URL` to match your local user, for example `postgresql://YOUR_USER@localhost:5432/opensetter`.
 
 Run the two processes in separate terminals:
 

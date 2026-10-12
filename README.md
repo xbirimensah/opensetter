@@ -4,14 +4,12 @@
 
 Open source Instagram comment-to-DM automation with an AI DM setter.
 
-Built on top of [OpenReply](https://github.com/diwenne/openreply) by Diwen Huang.
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
 [![Built with Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 
 </div>
 
-Someone comments `LINK` on your reel and gets your DM a second later. That part is OpenReply, and it works exactly as before. OpenSetter adds what happens next: when the prospect replies, an AI setter answers in your voice, keeps the conversation going, qualifies them, and moves the right people toward a booked call. You stay in control the whole time.
+Someone comments `LINK` on your reel and gets your DM a second later. OpenSetter also handles what happens next: when the prospect replies, an AI setter answers in your voice, keeps the conversation going, qualifies them, and moves the right people toward a booked call. You stay in control the whole time.
 
 ## What the AI setter does
 
@@ -36,7 +34,7 @@ Someone comments `LINK` on your reel and gets your DM a second later. That part 
 
 The LLM provider is pluggable: Anthropic API (default), any OpenAI-compatible endpoint, or a local `claude` / `codex` CLI if you want zero API spend. Retrieval embeddings run locally (no message content leaves your server for embedding).
 
-Everything OpenReply does is still here: keyword campaigns, tracked links, follow gates, workspaces and roles, the inbox, templates, reports, and follower analytics. See the [OpenReply README](https://github.com/diwenne/openreply#readme) for the full feature list.
+Around that sit the comment-to-DM essentials: keyword campaigns, tracked links, follow gates, workspaces and roles, the inbox, templates, reports, and follower analytics.
 
 ## Quick start
 
@@ -78,12 +76,6 @@ npm run knowledge:ingest -- ./knowledge
 ```
 
 That builds a local SQLite knowledge base with locally computed embeddings; the setter starts answering from your facts immediately. Prefer something hosted? Apply [schema/knowledge-base.sql](schema/knowledge-base.sql) to a Supabase project, set the two `SECOND_BRAIN_SUPABASE_*` vars, and the same command ingests there instead. Existing knowledge infrastructure can be plugged in via the `SECOND_BRAIN_*_RPC` overrides. Full details in [docs/ai-setter.md](docs/ai-setter.md). If you skip all of this, the setter still works from persona, goal, and chat history alone.
-
-## Credits
-
-OpenSetter is a fork of [OpenReply](https://github.com/diwenne/openreply) by [Diwen Huang](https://github.com/diwenne) (with contributions by Anish Raj), which provides the entire comment-to-DM engine, dashboard, and Meta integration this project stands on. If OpenSetter is useful to you, star their repo too.
-
-The AI reply engine is adapted from a private WhatsApp auto-reply bridge, rebuilt for Instagram on top of OpenReply's queue and worker.
 
 ## License
 
