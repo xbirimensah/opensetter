@@ -59,6 +59,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("getStyleCorpusStatus", () => {
@@ -169,6 +170,22 @@ describe("rebuildCorpusWithRecovery", () => {
     const [url, init] = fetchImpl.mock.calls[0];
     expect(url).toBe("/api/ai-setter/style-corpus");
     expect(JSON.parse(init.body)).toEqual({ instagramAccountId: "acc_1" });
+  });
+
+  it("sends the POST with the browser's own fetch when none is injected", async () => {
+    // Browsers throw "Illegal invocation" when fetch is called as a method
+    // of another object; the POST then never leaves the page.
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", function strictFetch(this: unknown, input: string, init?: RequestInit) {
+      if (this !== undefined && this !== globalThis) {
+        return Promise.reject(new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation"));
+      }
+      calls.push(`${init?.method ?? "GET"} ${input}`);
+      return Promise.resolve(json({ success: true, data: { status: status(), summary: { entryCount: 12 } } }));
+    });
+    const outcome = await rebuildCorpusWithRecovery("acc_1", PREVIOUS_BUILT_AT, { sleep: noSleep });
+    expect(calls).toEqual(["POST /api/ai-setter/style-corpus"]);
+    expect(outcome).toMatchObject({ kind: "success", recovered: false });
   });
 
   it("recovers a success the proxy hid behind an HTML timeout page", async () => {

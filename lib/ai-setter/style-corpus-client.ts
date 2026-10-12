@@ -74,6 +74,10 @@ interface ApiBody {
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+// Calls fetch unbound. Stored on an object and called as `deps.fetchImpl(...)`,
+// the browser's own fetch throws "Illegal invocation" and the request never leaves.
+const browserFetch: typeof fetch = (input, init) => fetch(input, init);
+
 /** Parse a JSON API body; null for HTML error pages and other non-JSON. */
 async function readApiBody(response: Response): Promise<ApiBody | null> {
   const type = response.headers.get("content-type") ?? "";
@@ -147,7 +151,7 @@ export async function rebuildCorpusWithRecovery(
   deps: RebuildDeps = {}
 ): Promise<CorpusRebuildOutcome> {
   const resolved = {
-    fetchImpl: deps.fetchImpl ?? fetch,
+    fetchImpl: deps.fetchImpl ?? browserFetch,
     sleep: deps.sleep ?? defaultSleep,
     maxPolls: deps.maxPolls ?? DEFAULT_MAX_POLLS,
     pollIntervalMs: deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
