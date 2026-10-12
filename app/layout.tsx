@@ -1,11 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "OpenSetter - Open source Instagram comment-to-DM automation with an AI setter",
   description:
-    "A free, self-hosted ManyChat alternative with an AI DM setter. Comment-to-DM automation plus an AI that answers your DMs in your voice, qualifies prospects, and books calls, using the official Meta API.",
+    "ManyChat and an AI setter in one: open source, self-hosted Instagram comment-to-DM automation plus an AI that answers your DMs in your voice, qualifies prospects, and books calls, using the official Meta API.",
   keywords: [
     "instagram automation",
     "comment to DM",
@@ -13,7 +12,7 @@ export const metadata: Metadata = {
     "ai dm setter",
     "instagram ai setter",
     "social commerce",
-    "manychat alternative",
+    "instagram dm automation",
   ],
 };
 
@@ -24,8 +23,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0b0b0d" },
-    { media: "(prefers-color-scheme: light)", color: "#f7f7f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#050505" },
+    { media: "(prefers-color-scheme: light)", color: "#F5F5F5" },
   ],
 };
 
@@ -49,7 +48,6 @@ export default function RootLayout({
       </head>
       <body className="min-h-full bg-background text-foreground font-sans antialiased">
         {children}
-        <Analytics />
       </body>
     </html>
   );

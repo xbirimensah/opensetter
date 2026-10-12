@@ -1,11 +1,14 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import LegalShell from "@/components/legal-shell";
+import { siteViewport } from "@/components/public-site-links";
 
 export const metadata: Metadata = {
   title: "Terms of Service - OpenSetter",
   description:
     "Terms for using OpenSetter's Instagram comment-to-DM campaign software.",
 };
+
+export const viewport: Viewport = siteViewport;
 
 export default function TermsPage() {
   return (

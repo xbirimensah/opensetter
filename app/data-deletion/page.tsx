@@ -1,11 +1,14 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import LegalShell from "@/components/legal-shell";
+import { siteViewport } from "@/components/public-site-links";
 
 export const metadata: Metadata = {
   title: "Data Deletion - OpenSetter",
   description:
     "How OpenSetter customers can disconnect Instagram and request account or campaign data deletion.",
 };
+
+export const viewport: Viewport = siteViewport;
 
 export default function DataDeletionPage() {
   return (

@@ -1,11 +1,14 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import LegalShell from "@/components/legal-shell";
+import { siteViewport } from "@/components/public-site-links";
 
 export const metadata: Metadata = {
   title: "Meta App Review Support - OpenSetter",
   description:
     "Meta App Review notes for OpenSetter's official Instagram private reply workflow.",
 };
+
+export const viewport: Viewport = siteViewport;
 
 export default function MetaReviewPage() {
   return (

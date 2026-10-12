@@ -1,11 +1,14 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import LegalShell from "@/components/legal-shell";
+import { siteViewport } from "@/components/public-site-links";
 
 export const metadata: Metadata = {
   title: "Privacy Policy - OpenSetter",
   description:
     "How OpenSetter handles Instagram account data, webhook payloads, billing data, and customer campaign information.",
 };
+
+export const viewport: Viewport = siteViewport;
 
 export default function PrivacyPage() {
   return (

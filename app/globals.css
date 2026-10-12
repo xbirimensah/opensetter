@@ -1,71 +1,244 @@
 @import "tailwindcss";
 
-/* ManyChat Alternative — Design System
-   Plain and functional. No gradients, glass, glow, or animation.
+/* =====================================================================
+   OPENSETTER APP THEME (logged-in dashboard, auth pages, shared reports)
 
-   Two themes, dark by default. NOT `@theme inline`: utilities must
-   compile to var() references so the [data-theme="light"] override
-   below can restyle at runtime. */
+   Brand: accent #A610DF, background #050505, text #FFFFFF, muted #666666,
+   dividers #2A2A2A. Neutrals are pure grays (R = G = B) and match the
+   public site palette ([data-theme="site"] further down); purple tints
+   keep the brand hue (about 283deg) and only move lightness.
+
+   Roles, dark first, light in brackets. Contrast is WCAG 2.x against
+   every surface the role sits on (page, card, hover row, raised sheet).
+   - foreground   #FFFFFF [#050505]  primary text, 18:1+.
+   - muted        #999999 [#4D4D4D]  secondary text, 6.1:1+ [7.4:1+].
+   - faint        #858585 [#666666]  tertiary small text: timestamps,
+                                     captions, labels. 4.7:1+ [5.0:1+],
+                                     AA at any size.
+   - quiet        #666666 [#858585]  the brand muted gray. 3.4-3.6:1, so
+                                     large text (24px, or 18.66px bold)
+                                     and decoration only, never body copy.
+   - accent       #A610DF [#9A0ED0]  fills: buttons, switches, selection.
+                                     White on it 5.6:1 [6.3:1]; hover
+                                     #B41BEF 4.8:1 [#8A0BBD 7.3:1].
+   - text-accent  #C95FF2 [#8A0BBD]  accent text and links. The brand
+                                     purple is only 3.4-3.7:1 as text on
+                                     near-black, so `text-accent` resolves
+                                     to this tint through Tailwind's
+                                     --text-color-* namespace while
+                                     bg-/border-/ring-accent keep the brand
+                                     fill. 5.3:1+ [6.1:1+].
+   - error        fill #D1342F (white on it 4.95:1), text #F87171 6.3:1+
+                  [#C41E2A for both: 5.2:1+, white on it 5.9:1].
+   - success      #4ADE80 [#157038], warning #FBBF24 [#945600]: 10:1+
+                  [5.1:1+]. Status colors stay semantic, never brand.
+   - surfaces     background #050505 [#F5F5F5], surface (cards) #0E0E0E
+                  [#FFFFFF], surface-hover #161616 [#F0F0F0],
+                  surface-raised (sheets, menus) #1A1A1A [#FFFFFF],
+                  border #2A2A2A [#E3E3E3]. Dividers are decorative;
+                  prefers-contrast: more raises them and the grays.
+   - fill         translucent gray for secondary buttons, chips and
+                  selected rows: white 7% / 12% [black 4.5% / 8%].
+   - segment      the selected pill of a segmented control on a fill
+                  track: #3A3A3A [#FFFFFF].
+
+   Materials: chrome floats over content as translucent layers. The
+   sidebar is the heavier material; the top bar and the phone tab bar are
+   thinner and only tint when content scrolls under them, with a soft
+   scroll-edge fade instead of a hard divider. A translucent layer never
+   sits on another translucent layer: anything opened from the chrome
+   (sheets, menus) uses the solid surface-raised.
+
+   NOT `@theme inline`: utilities must compile to var() references so the
+   [data-theme] blocks below can restyle at runtime.
+   ===================================================================== */
 
 @theme {
-  --color-background: #0b0b0d;
-  --color-foreground: #f4f4f5;
-  --color-surface: #161618;
-  --color-surface-hover: #1f1f22;
-  --color-border: #2e2e33;
-  --color-border-hover: #45454d;
-  --color-muted: #9b9ba3;
-  /* One step quieter than muted: timestamps, footnotes, placeholders. */
-  --color-faint: #71717a;
-  --color-accent: #6b8afd;
-  --color-accent-hover: #5372e8;
+  --color-background: #050505;
+  --color-foreground: #ffffff;
+  --color-surface: #0e0e0e;
+  --color-surface-hover: #161616;
+  --color-surface-raised: #1a1a1a;
+  --color-border: #2a2a2a;
+  --color-border-hover: #3a3a3a;
+  --color-muted: #999999;
+  --color-faint: #858585;
+  --color-quiet: #666666;
+  --color-fill: rgb(255 255 255 / 0.07);
+  --color-fill-strong: rgb(255 255 255 / 0.12);
+  /* Selected segment of a segmented control, on a fill track. */
+  --color-segment: #3a3a3a;
+  --color-accent: #a610df;
+  --color-accent-hover: #b41bef;
   --color-success: #4ade80;
-  --color-error: #f87171;
+  --color-error: #d1342f;
   --color-warning: #fbbf24;
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, monospace;
+  /* Text-only overrides: `text-accent` and `text-error` read these. */
+  --text-color-accent: #c95ff2;
+  --text-color-error: #f87171;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI",
+    Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Size-specific tracking and leading: tighter as text grows, about 0
+     for body sizes. */
+  --text-lg--letter-spacing: -0.008em;
+  --text-xl--letter-spacing: -0.012em;
+  --text-2xl--line-height: 1.25;
+  --text-2xl--letter-spacing: -0.016em;
+  --text-3xl--line-height: 1.15;
+  --text-3xl--letter-spacing: -0.02em;
+
+  /* App type ramp. Weight is set per use (hierarchy = weight + size +
+     spacing together). */
+  --text-title-1: 1.75rem;
+  --text-title-1--line-height: 1.14;
+  --text-title-1--letter-spacing: -0.022em;
+  --text-title-2: 1.375rem;
+  --text-title-2--line-height: 1.22;
+  --text-title-2--letter-spacing: -0.018em;
+  --text-title-3: 1.125rem;
+  --text-title-3--line-height: 1.3;
+  --text-title-3--letter-spacing: -0.012em;
+  --text-headline: 0.9375rem;
+  --text-headline--line-height: 1.35;
+  --text-headline--letter-spacing: -0.006em;
+  --text-footnote: 0.8125rem;
+  --text-footnote--line-height: 1.4;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.35;
+  --text-caption--letter-spacing: 0.006em;
+  --text-metric: 2rem;
+  --text-metric--line-height: 1.05;
+  --text-metric--letter-spacing: -0.03em;
+
+  /* Critically damped: fast start, long soft settle, no overshoot. CSS
+     transitions retarget from the current value, so a press or a drawer
+     reversed mid-flight never jumps. */
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* Dark values again under an explicit selector, so a subtree can pin
-   itself dark (marketing pages, the Instagram phone preview) even when
+   itself dark (the shared report, the Instagram phone preview) even when
    the app around it runs light: the subtree's own vars beat the values
    inherited from <html>. */
 [data-theme="dark"] {
-  --color-background: #0b0b0d;
-  --color-foreground: #f4f4f5;
-  --color-surface: #161618;
-  --color-surface-hover: #1f1f22;
-  --color-border: #2e2e33;
-  --color-border-hover: #45454d;
-  --color-muted: #9b9ba3;
-  --color-faint: #71717a;
-  --color-accent: #6b8afd;
-  --color-accent-hover: #5372e8;
+  --color-background: #050505;
+  --color-foreground: #ffffff;
+  --color-surface: #0e0e0e;
+  --color-surface-hover: #161616;
+  --color-surface-raised: #1a1a1a;
+  --color-border: #2a2a2a;
+  --color-border-hover: #3a3a3a;
+  --color-muted: #999999;
+  --color-faint: #858585;
+  --color-quiet: #666666;
+  --color-fill: rgb(255 255 255 / 0.07);
+  --color-fill-strong: rgb(255 255 255 / 0.12);
+  --color-segment: #3a3a3a;
+  --color-accent: #a610df;
+  --color-accent-hover: #b41bef;
   --color-success: #4ade80;
-  --color-error: #f87171;
+  --color-error: #d1342f;
   --color-warning: #fbbf24;
+  --text-color-accent: #c95ff2;
+  --text-color-error: #f87171;
 }
 
-/* Light theme: same roles, inverted values. Status colors darken one
-   step so they keep contrast on white. */
+/* Light: white cards on a near-white page, near-black text, the purple
+   deepened one step so text and fills keep their contrast on white. */
 [data-theme="light"] {
-  --color-background: #f7f7f8;
-  --color-foreground: #1a1a1e;
+  --color-background: #f5f5f5;
+  --color-foreground: #050505;
   --color-surface: #ffffff;
-  --color-surface-hover: #efeff2;
-  --color-border: #e0e0e5;
-  --color-border-hover: #c6c6cf;
-  --color-muted: #63636e;
-  --color-faint: #94949d;
-  --color-accent: #4a67e0;
-  --color-accent-hover: #3a55cd;
-  --color-success: #15803d;
-  --color-error: #dc2626;
-  --color-warning: #b45309;
+  --color-surface-hover: #f0f0f0;
+  --color-surface-raised: #ffffff;
+  --color-border: #e3e3e3;
+  --color-border-hover: #cfcfcf;
+  --color-muted: #4d4d4d;
+  --color-faint: #666666;
+  --color-quiet: #858585;
+  --color-fill: rgb(0 0 0 / 0.045);
+  --color-fill-strong: rgb(0 0 0 / 0.08);
+  --color-segment: #ffffff;
+  --color-accent: #9a0ed0;
+  --color-accent-hover: #8a0bbd;
+  --color-success: #157038;
+  --color-error: #c41e2a;
+  --color-warning: #945600;
+  --text-color-accent: #8a0bbd;
+  --text-color-error: #c41e2a;
+}
+
+/* Materials, shadows and the scrim. Plain custom properties (not theme
+   tokens): they are read by the component classes below. */
+:root,
+[data-theme="dark"] {
+  --material-sidebar: rgb(20 20 20 / 0.8);
+  --material-bar: rgb(5 5 5 / 0.72);
+  --material-edge: rgb(255 255 255 / 0.07);
+  --scroll-edge: rgb(5 5 5 / 0.7);
+  --scrim: rgb(0 0 0 / 0.56);
+  --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.035);
+  --shadow-float: 0 1px 0 rgb(255 255 255 / 0.05) inset,
+    0 24px 48px -20px rgb(0 0 0 / 0.85);
+  --shadow-raised: 0 24px 64px -24px rgb(0 0 0 / 0.9);
+}
+
+[data-theme="light"] {
+  --material-sidebar: rgb(255 255 255 / 0.76);
+  --material-bar: rgb(245 245 245 / 0.76);
+  --material-edge: rgb(0 0 0 / 0.06);
+  --scroll-edge: rgb(245 245 245 / 0.75);
+  --scrim: rgb(0 0 0 / 0.28);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-float: 0 1px 2px rgb(0 0 0 / 0.05),
+    0 16px 40px -16px rgb(0 0 0 / 0.16);
+  --shadow-raised: 0 24px 64px -24px rgb(0 0 0 / 0.28);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root:not([data-theme="light"]),
+  [data-theme="dark"] {
+    --material-sidebar: #141414;
+    --material-bar: #050505;
+  }
+
+  [data-theme="light"] {
+    --material-sidebar: #ffffff;
+    --material-bar: #f5f5f5;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root:not([data-theme="light"]),
+  [data-theme="dark"] {
+    --color-border: #8f8f8f;
+    --color-border-hover: #b3b3b3;
+    --color-muted: #c2c2c2;
+    --color-faint: #a8a8a8;
+    --color-quiet: #a8a8a8;
+    --text-color-accent: #dc97f7;
+    --material-sidebar: #0e0e0e;
+    --material-bar: #050505;
+  }
+
+  [data-theme="light"] {
+    --color-border: #8a8a8a;
+    --color-border-hover: #5c5c5c;
+    --color-muted: #333333;
+    --color-faint: #4d4d4d;
+    --color-quiet: #4d4d4d;
+    --text-color-accent: #6f0899;
+    --material-sidebar: #ffffff;
+    --material-bar: #f5f5f5;
+  }
 }
 
 html {
   color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html[data-theme="light"] {
@@ -76,11 +249,16 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+  font-optical-sizing: auto;
 }
 
-/* Focus ring — visible, for keyboard users. */
+::selection {
+  background-color: color-mix(in srgb, var(--color-accent) 38%, transparent);
+}
+
+/* Focus ring: visible, for keyboard users, in the AA accent tint. */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--text-color-accent);
   outline-offset: 2px;
 }
 
@@ -92,29 +270,360 @@ select:focus-visible {
   outline-offset: 1px;
 }
 
-/* Panel — flat container. Replaces .glass / .glass-strong. */
-.panel {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+/* Theme switches cross-fade instead of flashing (see theme-toggle.tsx). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 240ms;
+  animation-timing-function: ease-out;
 }
 
-/* Kept as no-op aliases so existing markup degrades to plain surfaces
-   instead of breaking. Prefer .panel in new code. */
-.glass,
-.glass-strong {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-}
+@layer components {
+  /* Panel: the app's card. Layered, so utilities (rounded-*, p-*, bg-*)
+     still override it. */
+  .panel {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-card);
+  }
 
-.gradient-mesh {
-  background: none;
-}
+  /* Kept as aliases so older markup degrades to plain cards. */
+  .glass,
+  .glass-strong {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+  }
 
-.animate-fade-in,
-.animate-slide-in,
-.animate-pulse-glow,
-.stagger > * {
-  animation: none;
+  .gradient-mesh {
+    background: none;
+  }
+
+  .animate-fade-in,
+  .animate-slide-in,
+  .animate-pulse-glow,
+  .stagger > * {
+    animation: none;
+  }
+
+  /* Static placeholder block while data loads. No shimmer: nothing loops. */
+  .skeleton {
+    border-radius: var(--radius-lg);
+    background-color: var(--color-fill);
+  }
+
+  /* Press feedback: lands on pointer-down (:active), short to read, soft
+     to settle. Reduced motion dims instead of shrinking (see below). */
+  .press {
+    touch-action: manipulation;
+    transition:
+      scale 320ms var(--ease-spring),
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease,
+      opacity 150ms ease;
+  }
+
+  .press:active:not(:disabled) {
+    scale: 0.97;
+    transition-duration: 90ms;
+  }
+
+  /* Buttons. Capsules; 36px to the eye on a mouse, 44px under a finger. */
+  .btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.25rem;
+    padding: 0 1rem;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.003em;
+    white-space: nowrap;
+    user-select: none;
+    touch-action: manipulation;
+    transition:
+      scale 320ms var(--ease-spring),
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease,
+      opacity 150ms ease;
+  }
+
+  .btn:active:not(:disabled):not([aria-disabled="true"]) {
+    scale: 0.97;
+    transition-duration: 90ms;
+  }
+
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .btn-sm {
+    min-height: 2rem;
+    padding: 0 0.875rem;
+    font-size: 0.8125rem;
+  }
+
+  @media (pointer: coarse) {
+    .btn,
+    .btn-sm {
+      min-height: 2.75rem;
+    }
+  }
+
+  .btn-primary {
+    background-color: var(--color-accent);
+    color: #ffffff;
+  }
+
+  .btn-secondary {
+    background-color: var(--color-fill);
+    color: var(--color-foreground);
+  }
+
+  .btn-quiet {
+    background-color: transparent;
+    color: var(--color-muted);
+  }
+
+  .btn-danger {
+    background-color: var(--color-error);
+    color: #ffffff;
+  }
+
+  @media (hover: hover) {
+    .btn-primary:hover:not(:disabled) {
+      background-color: var(--color-accent-hover);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background-color: var(--color-fill-strong);
+    }
+
+    .btn-quiet:hover:not(:disabled) {
+      background-color: var(--color-fill);
+      color: var(--color-foreground);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background-color: color-mix(in srgb, var(--color-error) 88%, #000000);
+    }
+  }
+
+  /* Text fields: 16px on phones so iOS does not zoom into them. */
+  .field {
+    display: block;
+    width: 100%;
+    min-height: 2.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    background-color: var(--color-surface);
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem;
+    line-height: 1.4;
+    color: var(--color-foreground);
+    transition:
+      border-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  .field::placeholder {
+    color: var(--color-faint);
+  }
+
+  .field:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--color-accent) 70%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+
+  .field:disabled {
+    opacity: 0.6;
+  }
+
+  @media (min-width: 40rem) {
+    .field {
+      min-height: 2.5rem;
+      font-size: 0.875rem;
+    }
+  }
+
+  /* Form label: sentence case, one step under body. */
+  .field-label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--color-muted);
+  }
+
+  /* Section header above a grouped card. */
+  .section-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.006em;
+    color: var(--color-foreground);
+  }
+
+  /* --- App chrome ------------------------------------------------------ */
+
+  /* Sidebar: the heavier material. On phones it is a drawer over the
+     content (that is where the blur shows); from lg up it floats beside
+     it. */
+  .material-sidebar {
+    background-color: var(--material-sidebar);
+    -webkit-backdrop-filter: saturate(160%) blur(40px);
+    backdrop-filter: saturate(160%) blur(40px);
+    border: 1px solid var(--material-edge);
+    box-shadow: var(--shadow-float);
+  }
+
+  /* Top bar: sticky inside the scroll container so content passes under
+     it. At rest it is clear; once content scrolls under it the thin
+     material fades in on ::before and ::after fades the page color out
+     below the bar, in place of a 1px divider. The material sits on a
+     pseudo-element so the bar itself never becomes a backdrop root. */
+  .app-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    isolation: isolate;
+  }
+
+  .app-topbar::before,
+  .app-topbar::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+
+  .app-topbar::before {
+    top: 0;
+    bottom: 0;
+    background-color: var(--material-bar);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  .app-topbar::after {
+    top: 100%;
+    height: 1.25rem;
+    background-image: linear-gradient(to bottom, var(--scroll-edge), transparent);
+  }
+
+  .app-topbar[data-scrolled="true"]::before,
+  .app-topbar[data-scrolled="true"]::after {
+    opacity: 1;
+  }
+
+  /* Phone tab bar: always over content, so the material is always on and
+     the fade sits on its top edge. */
+  .app-tabbar {
+    isolation: isolate;
+  }
+
+  .app-tabbar::before,
+  .app-tabbar::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .app-tabbar::before {
+    top: 0;
+    bottom: 0;
+    background-color: var(--material-bar);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  .app-tabbar::after {
+    bottom: 100%;
+    height: 1rem;
+    background-image: linear-gradient(to top, var(--scroll-edge), transparent);
+  }
+
+  /* Drawer and scrim travel and fade along the same path both ways. */
+  .app-drawer {
+    transition: translate 380ms var(--ease-spring);
+  }
+
+  .app-scrim {
+    background-color: var(--scrim);
+    transition: opacity 300ms ease;
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .material-sidebar,
+    .app-topbar::before,
+    .app-tabbar::before {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    .app-topbar[data-scrolled="true"] {
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .app-tabbar {
+      border-top: 1px solid var(--color-border);
+    }
+
+    .app-topbar::after,
+    .app-tabbar::after {
+      display: none;
+    }
+
+    .material-sidebar {
+      border-color: var(--color-border);
+    }
+  }
+
+  /* Reduced motion keeps the feedback, drops the movement: presses dim
+     instead of shrinking and the drawer appears in place. */
+  @media (prefers-reduced-motion: reduce) {
+    .press:active:not(:disabled),
+    .btn:active:not(:disabled):not([aria-disabled="true"]) {
+      scale: 1;
+      opacity: 0.7;
+    }
+
+    .app-drawer {
+      transition: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .btn,
+    .panel,
+    .field,
+    .material-sidebar {
+      border-color: CanvasText;
+    }
+
+    .app-topbar::after,
+    .app-tabbar::after {
+      display: none;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -123,5 +632,887 @@ select:focus-visible {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* =====================================================================
+   PUBLIC SITE THEME: <main data-theme="site">
+   The one-page public site (app/page.tsx) and the legal pages only. The
+   block is fully
+   self-contained: it redefines every --color-* role those pages use, so
+   they never inherit app values, and adds site-only --site-* tokens.
+   Nothing in the logged-in app sets data-theme="site".
+
+   Brand: accent #A610DF, background #050505, text #FFFFFF, muted #666666,
+   dividers #2A2A2A. Derived values stay in the same family: neutrals are
+   pure grays (R = G = B) between the brand black and white, and purple
+   tints keep the brand hue (about 283deg) and only move lightness.
+
+   Contrast (WCAG 2.x, on #050505 unless noted):
+   - #FFFFFF text: 20.4:1.
+   - White on #A610DF: 5.6:1; on the hover fill #B41BEF: 4.8:1. Filled
+     buttons pass AA at any text size.
+   - #A610DF as text is only 3.7:1, so accent text and links use the tint
+     #C95FF2: 6.2:1 on the page, 5.6:1 on the accent chip fill.
+   - Brand muted #666666 is 3.6:1: tertiary only (large text, at least
+     24px or 18.66px bold, and decorative marks). Never body copy.
+   - Secondary body text uses #999999: 7.2:1 (AAA) on the page, 6.4:1 on
+     the #161616 fill.
+   - Dividers #2A2A2A / #3A3A3A are decorative; prefers-contrast: more
+     raises them and the grays.
+   ===================================================================== */
+[data-theme="site"] {
+  --color-background: #050505;
+  --color-foreground: #ffffff;
+  --color-surface: #0e0e0e; /* cards, one step up from the page */
+  --color-surface-hover: #161616; /* secondary fills, card hover */
+  --color-border: #2a2a2a; /* brand divider */
+  --color-border-hover: #3a3a3a;
+  --color-muted: #999999; /* secondary text, AA/AAA for body copy */
+  --color-faint: #666666; /* brand muted: large or decorative only */
+  --color-accent: #a610df; /* brand purple: fills only */
+  --color-accent-hover: #b41bef; /* same hue, lighter fill on hover */
+  --color-success: #4ade80;
+  --color-error: #f87171;
+  --color-warning: #fbbf24;
+
+  --site-on-accent: #ffffff;
+  --site-accent-text: #c95ff2; /* brand hue tint for text on dark */
+  --site-accent-subtle: #1e0f24; /* accent chip fill */
+  --site-accent-subtle-border: #3b1f47;
+  --site-material: rgb(5 5 5 / 0.72); /* header glass over the page */
+  --site-material-raised: rgb(22 22 22 / 0.86); /* menu glass */
+  --site-scrim-edge: rgb(5 5 5 / 0.6);
+  --site-header-h: 3.5rem;
+  --site-gutter: 1.25rem;
+  --site-radius-lg: 1.25rem;
+  --site-radius-md: 0.875rem;
+  --site-radius-sm: 0.5rem;
+  /* Shaped like a critically damped spring: no overshoot, fast start,
+     long soft settle. CSS transitions retarget from the current value,
+     so a hover or press reversed mid-flight never jumps. */
+  --site-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --site-font: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI",
+    Roboto, "Helvetica Neue", sans-serif;
+
+  color-scheme: dark;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--site-font);
+  font-size: 1rem;
+  line-height: 1.6;
+  letter-spacing: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (min-width: 40rem) {
+  [data-theme="site"] {
+    --site-gutter: 2rem;
+  }
+}
+
+/* The root behind a public page (overscroll, safe areas) matches it, even
+   for a visitor whose app preference is the light theme. */
+html:has(body > [data-theme="site"]),
+html:has(body > [data-theme="site"]) body {
+  background-color: #050505;
+  color-scheme: dark;
+}
+
+[data-theme="site"] [id] {
+  scroll-margin-top: calc(var(--site-header-h) + 1.5rem);
+}
+
+[data-theme="site"] :focus-visible {
+  outline-color: var(--site-accent-text);
+}
+
+[data-theme="site"] ::selection {
+  background-color: #5b1a7a;
+  color: #ffffff;
+}
+
+@media (prefers-contrast: more) {
+  [data-theme="site"] {
+    --color-border: #8f8f8f;
+    --color-border-hover: #b3b3b3;
+    --color-muted: #c2c2c2;
+    --color-faint: #999999;
+    --site-accent-text: #dc97f7;
+    --site-accent-subtle-border: #c95ff2;
+    --site-material: #050505;
+    --site-material-raised: #0e0e0e;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="site"] {
+    --site-material: #050505;
+    --site-material-raised: #161616;
+  }
+}
+
+@layer components {
+  /* Layout */
+  .site-container {
+    width: 100%;
+    max-width: calc(72rem + 2 * var(--site-gutter));
+    margin-inline: auto;
+    padding-left: max(var(--site-gutter), env(safe-area-inset-left));
+    padding-right: max(var(--site-gutter), env(safe-area-inset-right));
+  }
+
+  /* Type. Tracking is size-specific: tighter as size grows, about 0 for
+     body. Leading tightens as size grows. */
+  .site-display {
+    font-size: clamp(2.5rem, 1.55rem + 3.8vw, 4.5rem);
+    font-weight: 700;
+    line-height: 1.04;
+    letter-spacing: -0.026em;
+    text-wrap: balance;
+  }
+
+  .site-headline {
+    font-size: clamp(2.25rem, 1.65rem + 2.4vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -0.024em;
+    text-wrap: balance;
+  }
+
+  @media (min-width: 64rem) {
+    .site-display {
+      letter-spacing: -0.032em;
+    }
+
+    .site-headline {
+      letter-spacing: -0.028em;
+    }
+  }
+
+  .site-title {
+    font-size: clamp(1.875rem, 1.45rem + 1.7vw, 2.75rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+
+  .site-heading {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.012em;
+  }
+
+  .site-subheading {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: -0.006em;
+  }
+
+  .site-lead {
+    font-size: clamp(1.0625rem, 0.98rem + 0.35vw, 1.25rem);
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    color: var(--color-muted);
+    text-wrap: pretty;
+  }
+
+  .site-body {
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--color-muted);
+    text-wrap: pretty;
+  }
+
+  .site-eyebrow {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--site-accent-text);
+    text-wrap: balance;
+  }
+
+  .site-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .site-accent-text {
+    color: var(--site-accent-text);
+  }
+
+  /* Buttons. Feedback lands on press (scale 0.97, about 90ms), release
+     settles back on the softer default curve. Hover only where hover
+     exists, so touch never sticks in a hover state. */
+  .site-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0 1.375rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.005em;
+    white-space: nowrap;
+    text-decoration: none;
+    touch-action: manipulation;
+    user-select: none;
+    transition:
+      transform 320ms var(--site-ease),
+      background-color 200ms var(--site-ease),
+      border-color 200ms var(--site-ease),
+      color 200ms var(--site-ease);
+  }
+
+  .site-btn:active {
+    transform: scale(0.97);
+    transition-duration: 90ms;
+  }
+
+  .site-btn-primary {
+    background-color: var(--color-accent);
+    color: var(--site-on-accent);
+  }
+
+  .site-btn-secondary {
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border);
+    color: var(--color-foreground);
+  }
+
+  @media (hover: hover) {
+    .site-btn-primary:hover {
+      background-color: var(--color-accent-hover);
+    }
+
+    .site-btn-secondary:hover {
+      background-color: var(--color-border);
+      border-color: var(--color-border-hover);
+    }
+  }
+
+  .site-btn-lg {
+    min-height: 3rem;
+    padding: 0 1.75rem;
+    font-size: 1rem;
+  }
+
+  /* Compact header button: 36px to the eye, 44px to the finger. */
+  .site-btn-sm {
+    min-height: 2.25rem;
+    padding: 0 1rem;
+    font-size: 0.875rem;
+  }
+
+  .site-btn-sm::before {
+    content: "";
+    position: absolute;
+    inset: -0.25rem -0.125rem;
+  }
+
+  .site-btn-block {
+    width: 100%;
+  }
+
+  /* Text-style links: a quick opacity dip on press, like a system text
+     button. */
+  .site-navlink,
+  .site-footer-link {
+    display: inline-flex;
+    align-items: center;
+    color: var(--color-muted);
+    touch-action: manipulation;
+    transition:
+      color 200ms var(--site-ease),
+      opacity 200ms var(--site-ease);
+  }
+
+  .site-navlink {
+    min-height: 2.75rem;
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .site-navlink[aria-current="page"] {
+    color: var(--color-foreground);
+  }
+
+  .site-footer-link {
+    min-width: 2.75rem;
+    min-height: 2rem;
+    padding-right: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  @media (pointer: coarse) {
+    .site-footer-link {
+      min-height: 2.75rem;
+    }
+  }
+
+  .site-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 600;
+    color: var(--site-accent-text);
+    touch-action: manipulation;
+    transition: opacity 200ms var(--site-ease);
+  }
+
+  @media (hover: hover) {
+    .site-navlink:hover,
+    .site-footer-link:hover {
+      color: var(--color-foreground);
+    }
+
+    .site-link:hover {
+      text-decoration: underline;
+      text-underline-offset: 0.2em;
+    }
+  }
+
+  .site-navlink:active,
+  .site-footer-link:active,
+  .site-link:active,
+  .site-wordmark:active {
+    opacity: 0.6;
+    transition-duration: 0ms;
+  }
+
+  .site-wordmark {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    font-size: 1.0625rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-foreground);
+    transition: opacity 200ms var(--site-ease);
+  }
+
+  /* Header: translucent material with content scrolling under it. The
+     material sits on ::before so the header itself never becomes a
+     backdrop root. Instead of a hard 1px divider, ::after fades the page
+     color out below the bar; it only shows where content actually
+     passes underneath. */
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    isolation: isolate;
+    height: calc(var(--site-header-h) + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .site-header::before,
+  .site-header::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .site-header::before {
+    top: 0;
+    bottom: 0;
+    background-color: var(--site-material);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  .site-header::after {
+    top: 100%;
+    height: 1.25rem;
+    background-image: linear-gradient(
+      to bottom,
+      var(--site-scrim-edge),
+      rgb(5 5 5 / 0)
+    );
+  }
+
+  /* Small-screen menu: a glass panel anchored under the trigger. It
+     grows from the trigger's corner and leaves the same way. */
+  .site-menu-button {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
+    color: var(--color-foreground);
+    touch-action: manipulation;
+    transition:
+      transform 320ms var(--site-ease),
+      background-color 200ms var(--site-ease);
+  }
+
+  .site-menu-button:active {
+    transform: scale(0.92);
+    transition-duration: 90ms;
+  }
+
+  .site-menu-icon {
+    position: relative;
+    width: 1.125rem;
+    height: 0.625rem;
+  }
+
+  .site-menu-icon::before,
+  .site-menu-icon::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1.5px;
+    border-radius: 1px;
+    background-color: currentColor;
+    transition: transform 320ms var(--site-ease);
+  }
+
+  .site-menu-icon::before {
+    top: 0;
+  }
+
+  .site-menu-icon::after {
+    bottom: 0;
+  }
+
+  .site-header:has(.site-menu:popover-open) .site-menu-icon::before {
+    transform: translateY(0.265625rem) rotate(45deg);
+  }
+
+  .site-header:has(.site-menu:popover-open) .site-menu-icon::after {
+    transform: translateY(-0.265625rem) rotate(-45deg);
+  }
+
+  .site-menu {
+    position: fixed;
+    inset: calc(var(--site-header-h) + env(safe-area-inset-top) + 0.375rem)
+      max(var(--site-gutter), env(safe-area-inset-right)) auto auto;
+    width: min(20rem, calc(100vw - 2 * var(--site-gutter)));
+    height: auto;
+    margin: 0;
+    padding: 0.5rem;
+    overflow: visible;
+    border: 1px solid rgb(255 255 255 / 0.08);
+    border-radius: var(--site-radius-lg);
+    background-color: var(--site-material-raised);
+    -webkit-backdrop-filter: saturate(180%) blur(24px);
+    backdrop-filter: saturate(180%) blur(24px);
+    box-shadow: 0 24px 48px -16px rgb(0 0 0 / 0.7);
+    color: var(--color-foreground);
+    transform-origin: top right;
+    transition:
+      opacity 220ms var(--site-ease),
+      transform 320ms var(--site-ease),
+      overlay 320ms var(--site-ease) allow-discrete,
+      display 320ms var(--site-ease) allow-discrete;
+  }
+
+  .site-menu:not(:popover-open) {
+    opacity: 0;
+    transform: translateY(-0.375rem) scale(0.96);
+  }
+
+  @starting-style {
+    .site-menu:popover-open {
+      opacity: 0;
+      transform: translateY(-0.375rem) scale(0.96);
+    }
+  }
+
+  .site-menu-link {
+    display: flex;
+    align-items: center;
+    min-height: 3rem;
+    padding: 0 0.875rem;
+    border-radius: var(--site-radius-md);
+    font-size: 1.0625rem;
+    font-weight: 500;
+    letter-spacing: -0.008em;
+    color: var(--color-foreground);
+    touch-action: manipulation;
+    transition: background-color 200ms var(--site-ease);
+  }
+
+  .site-menu-link[aria-current="page"] {
+    color: var(--site-accent-text);
+  }
+
+  .site-menu-link:active {
+    background-color: rgb(255 255 255 / 0.1);
+    transition-duration: 0ms;
+  }
+
+  @media (hover: hover) {
+    .site-menu-link:hover {
+      background-color: rgb(255 255 255 / 0.06);
+    }
+  }
+
+  .site-menu .site-btn {
+    margin-top: 0.5rem;
+  }
+
+  /* Surfaces */
+  .site-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--site-radius-lg);
+    background-color: var(--color-surface);
+  }
+
+  .site-card-link {
+    display: block;
+    touch-action: manipulation;
+    transition:
+      transform 320ms var(--site-ease),
+      background-color 200ms var(--site-ease),
+      border-color 200ms var(--site-ease);
+  }
+
+  .site-card-link:active {
+    transform: scale(0.985);
+    transition-duration: 90ms;
+  }
+
+  @media (hover: hover) {
+    .site-card-link:hover {
+      border-color: var(--color-border-hover);
+      background-color: var(--color-surface-hover);
+    }
+  }
+
+  .site-divided > * + * {
+    border-top: 1px solid var(--color-border);
+  }
+
+  .site-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.75rem;
+    padding: 0 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background-color: var(--color-surface-hover);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    color: var(--color-foreground);
+    white-space: nowrap;
+  }
+
+  .site-chip-accent {
+    border-color: var(--site-accent-subtle-border);
+    background-color: var(--site-accent-subtle);
+    color: var(--site-accent-text);
+    letter-spacing: 0.04em;
+  }
+
+  .site-footer {
+    border-top: 1px solid var(--color-border);
+  }
+
+  /* Long-form legal copy */
+  .site-prose {
+    font-size: 1rem;
+    line-height: 1.7;
+    color: var(--color-muted);
+  }
+
+  .site-prose > * + * {
+    margin-top: 2.5rem;
+  }
+
+  .site-prose h2 {
+    letter-spacing: -0.012em;
+    line-height: 1.3;
+  }
+
+  .site-prose a {
+    color: var(--site-accent-text);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+
+  @media (prefers-contrast: more) {
+    .site-header {
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .site-header::after {
+      display: none;
+    }
+
+    .site-menu {
+      border-color: var(--color-border);
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .site-header::before,
+    .site-menu {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  /* Reduced motion keeps feedback but drops movement: presses dim
+     instead of shrinking, and the menu appears in place. */
+  @media (prefers-reduced-motion: reduce) {
+    .site-btn:active,
+    .site-card-link:active,
+    .site-menu-button:active {
+      transform: none;
+      opacity: 0.75;
+    }
+
+    .site-menu,
+    .site-menu:not(:popover-open) {
+      transform: none;
+    }
+
+    @starting-style {
+      .site-menu:popover-open {
+        transform: none;
+      }
+    }
+  }
+
+  @media (forced-colors: active) {
+    .site-btn,
+    .site-chip,
+    .site-menu {
+      border-color: CanvasText;
+    }
+
+    .site-header::after {
+      display: none;
+    }
+  }
+}
+
+/* Public site: product illustrations (chat, flow canvas, chart). Static by
+   design: nothing moves on its own, so there is nothing to reduce. */
+@layer components {
+  .site-screen {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--site-radius-lg);
+    background-color: var(--color-surface);
+  }
+
+  .site-screen-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0 0.875rem;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: -0.003em;
+  }
+
+  .site-thread {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.875rem;
+  }
+
+  .site-avatar {
+    display: inline-grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    background-color: var(--color-border);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+
+  /* Bubbles follow Instagram's layout from the account's side: the
+     contact on the left in gray, your messages on the right in the brand
+     purple. Purple therefore always means "OpenSetter sent this". */
+  .site-bubble {
+    max-width: 88%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 1.125rem;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+
+  .site-bubble-in {
+    align-self: flex-start;
+    border-bottom-left-radius: 0.375rem;
+    background-color: var(--color-surface-hover);
+    box-shadow: inset 0 0 0 1px var(--color-border);
+    color: var(--color-foreground);
+  }
+
+  .site-bubble-out {
+    align-self: flex-end;
+    border-bottom-right-radius: 0.375rem;
+    background-color: var(--color-accent);
+    color: var(--site-on-accent);
+  }
+
+  .site-bubble-meta {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--color-muted);
+  }
+
+  .site-dm-button {
+    display: block;
+    margin-top: 0.5rem;
+    padding: 0.4375rem 0.5rem;
+    border-radius: 0.75rem;
+    background-color: rgb(0 0 0 / 0.22); /* white label stays 7:1+ */
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* Flow canvas: the editor's dotted grid, as a functional backdrop. */
+  .site-canvas {
+    border: 1px solid var(--color-border);
+    border-radius: var(--site-radius-lg);
+    background-color: var(--color-background);
+    background-image: radial-gradient(circle at 1px 1px, var(--color-border) 1px, transparent 0);
+    background-size: 1.25rem 1.25rem;
+  }
+
+  .site-node {
+    width: 100%;
+    max-width: 22rem;
+    margin-inline: auto;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--site-radius-md);
+    background-color: var(--color-surface);
+  }
+
+  .site-node-trigger {
+    border-color: var(--site-accent-subtle-border);
+    background-color: var(--site-accent-subtle);
+  }
+
+  .site-connector {
+    width: 1.5px;
+    height: 1.25rem;
+    margin-inline: auto;
+    background-color: var(--color-border-hover);
+  }
+
+  /* Horizontal swipe row on small screens: native momentum scrolling with
+     snap points, bleeding to the screen edges, aligned to the gutter. */
+  .site-swipe {
+    display: flex;
+    gap: 0.75rem;
+    margin-inline: calc(-1 * max(var(--site-gutter), env(safe-area-inset-left)));
+    padding-inline: max(var(--site-gutter), env(safe-area-inset-left));
+    padding-bottom: 0.25rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: max(var(--site-gutter), env(safe-area-inset-left));
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  .site-swipe > * {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+  }
+
+  /* Bar chart: values on hover or keyboard focus, never on every bar. */
+  .site-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 8rem;
+    border-bottom: 1px solid var(--color-border-hover);
+  }
+
+  .site-bar {
+    position: relative;
+    display: flex;
+    flex: 1;
+    align-items: flex-end;
+    height: 100%;
+    outline-offset: 2px;
+  }
+
+  .site-bar > span:first-child {
+    display: block;
+    width: 100%;
+    border-radius: 4px 4px 0 0;
+    background-color: var(--color-accent);
+    transition: background-color 200ms var(--site-ease);
+  }
+
+  .site-bar-value {
+    position: absolute;
+    left: 50%;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.375rem;
+    background-color: var(--color-foreground);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-background);
+    white-space: nowrap;
+    opacity: 0;
+    transform: translate(-50%, -0.25rem);
+    pointer-events: none;
+    transition: opacity 160ms var(--site-ease);
+  }
+
+  .site-bar:focus-visible .site-bar-value,
+  .site-bar:hover .site-bar-value {
+    opacity: 1;
+  }
+
+  @media (hover: hover) {
+    .site-bars:hover .site-bar > span:first-child {
+      background-color: var(--site-accent-subtle-border);
+    }
+
+    .site-bars:hover .site-bar:hover > span:first-child {
+      background-color: var(--color-accent);
+    }
+  }
+
+  @media (forced-colors: active) {
+    .site-bar > span:first-child,
+    .site-bubble-out {
+      background-color: CanvasText;
+      color: Canvas;
+    }
   }
 }

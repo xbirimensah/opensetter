@@ -1,4 +1,5 @@
-import Link from "next/link";
+import PublicSiteFooter from "@/components/public-site-footer";
+import PublicSiteHeader from "@/components/public-site-header";
 
 interface LegalShellProps {
   title: string;
@@ -14,33 +15,17 @@ export default function LegalShell({
   children,
 }: LegalShellProps) {
   return (
-    <main className="min-h-screen bg-background text-foreground" data-theme="dark">
-      <header className="border-b border-white/10">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="text-lg font-bold text-white">OpenSetter</span>
-          </Link>
-          <Link
-            href="/login"
-            className="text-sm font-semibold text-zinc-300 transition hover:text-white"
-          >
-            Sign in
-          </Link>
-        </div>
-      </header>
+    <main className="min-h-screen bg-background text-foreground" data-theme="site">
+      <PublicSiteHeader />
 
-      <article className="mx-auto max-w-3xl px-5 py-14">
-        <p className="text-sm font-semibold uppercase text-cyan-200">
-          Last updated {updatedAt}
-        </p>
-        <h1 className="mt-4 text-4xl font-black text-white sm:text-5xl">
-          {title}
-        </h1>
-        <p className="mt-5 text-base leading-8 text-zinc-300">{description}</p>
-        <div className="mt-10 space-y-8 text-sm leading-7 text-zinc-300">
-          {children}
-        </div>
+      <article className="site-container max-w-[calc(46rem+2*var(--site-gutter))] pb-20 pt-14 sm:pb-28 sm:pt-20">
+        <p className="site-label">Last updated {updatedAt}</p>
+        <h1 className="site-headline mt-4">{title}</h1>
+        <p className="site-lead mt-6">{description}</p>
+        <div className="site-prose mt-12 border-t border-border pt-10">{children}</div>
       </article>
+
+      <PublicSiteFooter />
     </main>
   );
 }
