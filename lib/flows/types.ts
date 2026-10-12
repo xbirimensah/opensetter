@@ -2,9 +2,11 @@
  * Flow contract shared by the engine, the editor and the API.
  *
  * A flow is a ManyChat-style automation for Instagram DMs: a graph of
- * nodes stored as JSON on Flow.graph. Comment triggers live on
- * Automation.flowId (reusing the campaign post picker, keyword matching,
- * public replies and dedupe); every other trigger lives on Flow.triggers.
+ * nodes stored as JSON on Flow.graph. Comment triggers are Automation rows
+ * with flowId = the flow (reusing the comment pipeline: keyword matching,
+ * public replies, dedupe, quota and DmLog stats); the flow API merges them
+ * into the trigger list as CommentTrigger. Every other trigger lives on
+ * Flow.triggers.
  *
  * Meta limits encoded here (Instagram Messaging API):
  * - text: 1000 UTF-8 bytes (the engine trims by bytes), 640 characters
@@ -234,6 +236,8 @@ export type FlowNodeType = FlowNode["type"];
 export interface FlowGraph {
   startNodeId: string | null;
   nodes: FlowNode[];
+  /** Editor-only: where the "When..." trigger card sits on the canvas. */
+  triggerPosition?: { x: number; y: number };
 }
 
 // ─── Triggers ─────────────────────────────────────────────────────────────
@@ -265,6 +269,38 @@ export type FlowTrigger =
   | { id: string; type: "new_follower" };
 
 export type FlowTriggerType = FlowTrigger["type"];
+
+/**
+ * Comment on a post or reel. Not stored in Flow.triggers: each one is an
+ * Automation row with flowId = the flow, so the comment pipeline (dedupe,
+ * quota, public replies, DmLog stats, share reports) stays unchanged. The
+ * flow API returns these rows merged into the trigger list and syncs them
+ * back on save (lib/flows/comment-triggers.ts).
+ */
+export interface CommentTrigger {
+  id: string;
+  type: "comment";
+  /** The Automation row behind it; absent until the first save. */
+  automationId?: string;
+  /** Opaque row version from the API (optimistic concurrency); the editor keeps it outside its draft. */
+  version?: string;
+  /** Set only for a specific post or reel. */
+  postId: string | null;
+  postUrl: string | null;
+  matchAnyPost: boolean;
+  /** Binds to the next reel the account posts (cron attach-next-reel). */
+  pendingNextReel: boolean;
+  keywords: string[];
+  matchAnyWord: boolean;
+  wholeWordMatch: boolean;
+  publicReplyEnabled: boolean;
+  /** Rotated public replies under the comment. */
+  publicReplyMessages: string[];
+}
+
+/** What the editor and the flow API list as a flow's triggers. */
+export type EditorTrigger = FlowTrigger | CommentTrigger;
+export type EditorTriggerType = EditorTrigger["type"];
 
 /** What started a run. */
 export interface FlowRunContext {

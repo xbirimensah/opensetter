@@ -12,9 +12,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Icon } from "./icons";
 
-/** Same field style as the campaign builder; text-base on phones stops iOS zoom. */
-export const FIELD_CLASS =
-  "w-full min-w-0 rounded-lg border border-border bg-surface px-3 py-2.5 text-base text-foreground placeholder:text-faint transition-colors duration-150 focus:border-accent/40 focus:outline-none disabled:opacity-60 sm:py-2 sm:text-sm";
+/** The app's shared text field (app/globals.css .field): 16px on phones stops iOS zoom. */
+export const FIELD_CLASS = "field min-w-0";
 
 /** Critically damped curve (no overshoot) used for every non-press transition. */
 export const EASE = "ease-[cubic-bezier(0.25,1,0.5,1)]";
@@ -25,12 +24,13 @@ export const PRESS =
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "success";
 
+/** Variants map onto the shared capsule buttons in app/globals.css (.btn-*). */
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-white hover:bg-accent-hover",
-  secondary: "border border-border text-foreground hover:border-border-hover hover:bg-surface-hover",
-  ghost: "text-muted hover:bg-surface-hover hover:text-foreground",
-  danger: "border border-error/30 text-error hover:bg-error/10",
-  success: "border border-success/30 text-success hover:bg-success/10",
+  primary: "btn-primary",
+  secondary: "btn-secondary",
+  ghost: "btn-quiet",
+  danger: "btn-danger",
+  success: "border-success/30 text-success hover:bg-success/10",
 };
 
 export function Button({
@@ -40,14 +40,10 @@ export function Button({
   type = "button",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: "sm" | "md" }) {
-  const sizing =
-    size === "sm"
-      ? "min-h-11 gap-1.5 rounded-lg px-3 text-xs sm:min-h-8"
-      : "min-h-11 gap-2 rounded-lg px-4 text-sm sm:min-h-9";
   return (
     <button
       type={type}
-      className={`inline-flex shrink-0 select-none items-center justify-center font-medium disabled:pointer-events-none disabled:opacity-50 ${sizing} ${VARIANTS[variant]} ${PRESS} ${className}`}
+      className={`btn shrink-0 ${size === "sm" ? "btn-sm" : ""} ${VARIANTS[variant]} ${className}`}
       {...props}
     />
   );
@@ -407,7 +403,7 @@ export function Segmented<T extends string>({
   ariaLabel: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className="inline-flex max-w-full flex-wrap rounded-lg bg-surface-hover p-0.5">
+    <div role="radiogroup" aria-label={ariaLabel} className="inline-flex max-w-full flex-wrap rounded-lg bg-fill p-0.5">
       {options.map((option) => (
         <button
           key={option.value}
@@ -416,7 +412,7 @@ export function Segmented<T extends string>({
           aria-checked={value === option.value}
           onClick={() => onChange(option.value)}
           className={`min-h-11 rounded-md px-3 text-xs font-medium sm:min-h-7 ${PRESS} ${
-            value === option.value ? "bg-surface text-foreground shadow-sm" : "text-muted hover:text-foreground"
+            value === option.value ? "bg-segment text-foreground shadow-sm" : "text-muted hover:text-foreground"
           }`}
         >
           {option.label}
@@ -506,7 +502,7 @@ export function Popover({
       {open && (
         <div
           role="menu"
-          className={`absolute top-full z-40 mt-1 overflow-hidden rounded-xl border border-border bg-surface shadow-xl transition-[opacity,scale] duration-150 ${EASE} starting:scale-95 starting:opacity-0 ${
+          className={`absolute top-full z-40 mt-1 overflow-hidden rounded-xl border border-border bg-surface-raised shadow-xl transition-[opacity,scale] duration-150 ${EASE} starting:scale-95 starting:opacity-0 ${
             align === "right" ? "right-0 origin-top-right" : "left-0 origin-top-left"
           }`}
         >

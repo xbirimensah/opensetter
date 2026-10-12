@@ -79,7 +79,7 @@ export default function ImportCampaignsPage() {
       setError("Could not stage the import in this browser.");
       return;
     }
-    router.push("/campaigns/new");
+    router.push("/campaigns/new?import=1");
   }
 
   return (
@@ -150,7 +150,7 @@ export default function ImportCampaignsPage() {
           Review and import
         </button>
         <button
-          onClick={() => router.push("/campaigns")}
+          onClick={() => router.push("/flows")}
           className="min-h-11 flex-1 px-5 py-2 rounded text-sm text-muted hover:text-foreground border border-border sm:min-h-0 sm:flex-none"
         >
           Cancel

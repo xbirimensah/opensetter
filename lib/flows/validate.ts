@@ -371,6 +371,7 @@ const nodeSchema = z.discriminatedUnion("type", [
 export const flowGraphShapeSchema = z.object({
   startNodeId: refSchema,
   nodes: z.array(nodeSchema).max(FLOW_EDITOR_LIMITS.nodesMax),
+  triggerPosition: z.object({ x: z.number(), y: z.number() }).optional(),
 });
 
 const keywordListSchema = z.array(z.string().max(200)).max(SHAPE_LIST_MAX);

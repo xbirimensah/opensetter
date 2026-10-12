@@ -16,7 +16,7 @@ import type {
   FlowTrigger,
   FlowTriggerType,
 } from "@/lib/flows/types";
-import { nodeDisplayName, parseSaveTo, RULE_OPS, TRIGGER_TYPE_LABELS } from "@/lib/flows/validate";
+import { nodeDisplayName, parseSaveTo, RULE_OPS } from "@/lib/flows/validate";
 
 /** Short random id; getRandomValues also works on plain-http self-hosted setups. */
 export function newId(prefix = "n"): string {
@@ -234,22 +234,6 @@ export function cloneNodeWithNewIds(node: FlowNode): FlowNode {
   }
 }
 
-export function duplicateNode(graph: FlowGraph, id: string): { graph: FlowGraph; copyId: string | null } {
-  const original = graph.nodes.find((n) => n.id === id);
-  if (!original) return { graph, copyId: null };
-  const copy = cloneNodeWithNewIds(original);
-  return { graph: addNode(graph, copy, id), copyId: copy.id };
-}
-
-export function moveNode(graph: FlowGraph, id: string, direction: -1 | 1): FlowGraph {
-  const index = graph.nodes.findIndex((n) => n.id === id);
-  const target = index + direction;
-  if (index < 0 || target < 0 || target >= graph.nodes.length) return graph;
-  const nodes = [...graph.nodes];
-  [nodes[index], nodes[target]] = [nodes[target], nodes[index]];
-  return { ...graph, nodes };
-}
-
 /** Moves item `index` of a list one place up or down (new array). */
 export function moveItem<T>(list: T[], index: number, direction: -1 | 1): T[] {
   const target = index + direction;
@@ -323,30 +307,4 @@ export function formatDuration(seconds: number): string {
   }
   const minutes = Math.round(seconds / 60);
   return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-}
-
-function quoteList(words: string[] | undefined, max = 3): string {
-  const list = (words ?? []).filter((w) => w.trim());
-  const shown = list.slice(0, max).map((w) => `"${w}"`).join(", ");
-  return list.length > max ? `${shown} +${list.length - max}` : shown;
-}
-
-/** One line per trigger, for lists and headers. */
-export function describeTrigger(trigger: FlowTrigger): string {
-  switch (trigger.type) {
-    case "dm_keyword":
-      return trigger.keywords.some((k) => k.trim()) ? `DM ${quoteList(trigger.keywords)}` : "DM keyword (none yet)";
-    case "story_reply":
-      return trigger.keywords?.some((k) => k.trim()) ? `Story reply ${quoteList(trigger.keywords)}` : "Any story reply";
-    case "ref_link":
-      return `Ref link ?ref=${trigger.ref}`;
-    case "new_follower":
-      return "New follower (waiting on Meta)";
-    default:
-      return TRIGGER_TYPE_LABELS[trigger.type];
-  }
-}
-
-export function summarizeTriggers(triggers: FlowTrigger[]): string {
-  return triggers.map(describeTrigger).join(" · ");
 }

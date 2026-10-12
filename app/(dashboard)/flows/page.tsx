@@ -3,18 +3,32 @@
 /**
  * Flows List
  *
- * Every ManyChat-style flow in the workspace: status, what starts it, which
- * comment campaigns run it, runs in progress and when it changed.
+ * Every automation in the workspace in one list: flows (with their
+ * comment triggers merged in) and classic comment campaigns that predate
+ * flows (Classic badge, they open the campaign editor). Name, what starts
+ * it, status, runs or sends, and when it changed.
  */
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import AccountSelect from "@/components/account-select";
-import type { FlowAccount, FlowListItem } from "@/components/flows/api-types";
-import { summarizeTriggers } from "@/components/flows/graph-utils";
+import type { ClassicCampaignItem, FlowAccount, FlowListItem } from "@/components/flows/api-types";
+import { newId } from "@/components/flows/graph-utils";
 import { Icon } from "@/components/flows/icons";
-import { Button, IconButton, Menu, PRESS, StatusPill } from "@/components/flows/ui";
+import { Button, IconButton, Menu, PRESS } from "@/components/flows/ui";
+import { triggersForCopy } from "@/lib/flows/comment-triggers";
+import { describeEditorTrigger, summarizeEditorTriggers } from "@/lib/flows/trigger-summary";
+
+type Row =
+  | { kind: "flow"; updatedAt: string; flow: FlowListItem }
+  | { kind: "classic"; updatedAt: string; campaign: ClassicCampaignItem };
+
+const STATUS_BADGE: Record<"DRAFT" | "ACTIVE" | "PAUSED", { label: string; className: string }> = {
+  DRAFT: { label: "Draft", className: "bg-muted/15 text-muted" },
+  ACTIVE: { label: "Live", className: "bg-success/12 text-success" },
+  PAUSED: { label: "Paused", className: "bg-warning/12 text-warning" },
+};
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -28,9 +42,19 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+function Badge({ status }: { status: "DRAFT" | "ACTIVE" | "PAUSED" }) {
+  const badge = STATUS_BADGE[status];
+  return (
+    <span className={`inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] ${badge.className}`}>
+      {badge.label}
+    </span>
+  );
+}
+
 export default function FlowsPage() {
   const router = useRouter();
   const [flows, setFlows] = useState<FlowListItem[]>([]);
+  const [classic, setClassic] = useState<ClassicCampaignItem[]>([]);
   const [accounts, setAccounts] = useState<FlowAccount[]>([]);
   const [accountId, setAccountId] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -50,6 +74,7 @@ export default function FlowsPage() {
           return;
         }
         setFlows(payload.data as FlowListItem[]);
+        setClassic((payload.classicCampaigns ?? []) as ClassicCampaignItem[]);
         setAccounts(payload.accounts as FlowAccount[]);
       })
       .catch(() => {
@@ -93,7 +118,7 @@ export default function FlowsPage() {
           name: `${flow.name} copy`.slice(0, 100),
           instagramAccountId: flow.instagramAccountId,
           graph: source.data.graph,
-          triggers: source.data.triggers,
+          triggers: Array.isArray(source.data.triggers) ? triggersForCopy(source.data.triggers, () => newId("t")) : [],
         }),
       });
       const payload = await res.json();
@@ -105,7 +130,12 @@ export default function FlowsPage() {
   }
 
   async function deleteFlow(flow: FlowListItem) {
-    if (!window.confirm(`Delete "${flow.name}"? Runs in progress stop. This cannot be undone.`)) return;
+    const comments = flow.triggers.filter((t) => t.type === "comment").length;
+    const extra =
+      comments > 0
+        ? ` Its ${comments === 1 ? "comment trigger and its" : `${comments} comment triggers and their`} send history are deleted too.`
+        : "";
+    if (!window.confirm(`Delete "${flow.name}"?${extra} Runs in progress stop. This cannot be undone.`)) return;
     setError(null);
     try {
       const res = await fetch(`/api/flows/${flow.id}`, { method: "DELETE" });
@@ -114,6 +144,19 @@ export default function FlowsPage() {
       setFlows((current) => current.filter((f) => f.id !== flow.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete the flow");
+    }
+  }
+
+  async function deleteClassic(campaign: ClassicCampaignItem) {
+    if (!window.confirm(`Delete the classic campaign "${campaign.name}" and its send history? This cannot be undone.`)) return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/automations?id=${encodeURIComponent(campaign.id)}`, { method: "DELETE" });
+      const payload = await res.json();
+      if (!res.ok || !payload.success) throw new Error(payload.error ?? "Could not delete the campaign");
+      setClassic((current) => current.filter((c) => c.id !== campaign.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete the campaign");
     }
   }
 
@@ -153,20 +196,25 @@ export default function FlowsPage() {
     return (
       <div className="space-y-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="panel h-24 rounded-2xl" />
+          <div key={i} className="panel h-20 rounded-2xl" />
         ))}
       </div>
     );
   }
 
+  const rows: Row[] = [
+    ...flows.map((flow) => ({ kind: "flow" as const, updatedAt: flow.updatedAt, flow })),
+    ...classic.map((campaign) => ({ kind: "classic" as const, updatedAt: campaign.updatedAt, campaign })),
+  ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Flows</h1>
-          <p className="mt-1 max-w-xl text-sm text-muted">
-            Multi-step DM automations: messages with buttons and media, questions, conditions, tags and webhooks.
-            Start them from DM keywords, stories, ig.me links or a comment campaign.
+          {/* The app top bar already titles the page "Flows". */}
+          <p className="max-w-xl text-sm leading-relaxed text-muted">
+            Every automation starts here: a comment on a post or reel, a DM keyword, a story reply or an ig.me link,
+            then messages, questions, conditions and actions on a canvas.
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -180,7 +228,25 @@ export default function FlowsPage() {
               }}
             />
           )}
-          {newFlowButton}
+          <div className="flex items-center gap-2">
+            {newFlowButton}
+            <Menu
+              align="right"
+              width="w-60"
+              items={[
+                {
+                  label: "Import classic campaigns",
+                  hint: "From a CSV, one row per campaign",
+                  onSelect: () => router.push("/campaigns/import"),
+                },
+              ]}
+              trigger={(props) => (
+                <IconButton label="More" {...props}>
+                  <Icon.more className="h-4 w-4" />
+                </IconButton>
+              )}
+            />
+          </div>
         </div>
       </div>
 
@@ -190,95 +256,175 @@ export default function FlowsPage() {
         </p>
       )}
 
-      {flows.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="panel rounded-2xl p-6 text-center sm:p-12">
           <h2 className="text-lg font-semibold tracking-tight">No flows yet</h2>
           <p className="mx-auto mb-6 mt-2 max-w-sm text-sm text-muted">
-            Build a conversation once: a welcome message, a question for their email, a branch for followers, a hand-off to
-            your AI setter. Then reuse it from any trigger.
+            Start with a trigger, like a comment on your next reel, then send a message with a button, ask for an email
+            and deliver the link.
           </p>
           <div className="flex justify-center">{newFlowButton}</div>
         </div>
       ) : (
-        <ul className="space-y-3">
-          {flows.map((flow) => {
-            const triggerLine = summarizeTriggers(flow.triggers);
-            return (
-              <li key={flow.id}>
-                <div className="panel group relative rounded-2xl p-4 transition-colors duration-150 hover:border-border-hover">
-                  <div className="flex items-start gap-3">
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link
-                          href={`/flows/${flow.id}`}
-                          className="min-w-0 truncate text-sm font-semibold tracking-tight text-foreground after:absolute after:inset-0 after:rounded-2xl after:content-['']"
-                        >
-                          {flow.name}
-                        </Link>
-                        <StatusPill status={flow.status} />
-                        {accounts.length > 1 && (
-                          <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">
-                            @{flow.instagramAccount.username}
-                          </span>
-                        )}
-                      </div>
-                      <p className="truncate text-sm text-muted">
-                        {triggerLine || (flow.automations.length > 0 ? "Comment campaigns only" : "No triggers yet")}
-                      </p>
-                      {flow.firstText && <p className="truncate text-xs text-faint">&ldquo;{flow.firstText}&rdquo;</p>}
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-faint">
-                        <span>
-                          {flow.nodeCount} {flow.nodeCount === 1 ? "step" : "steps"}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span className={flow.activeRuns > 0 ? "font-medium text-foreground" : undefined}>
-                          {flow.activeRuns} active {flow.activeRuns === 1 ? "run" : "runs"}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span>Updated {relativeTime(flow.updatedAt)}</span>
-                      </div>
-                      {flow.automations.length > 0 && (
-                        <div className="relative z-10 flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs text-muted">Used in</span>
-                          {flow.automations.map((campaign) => (
-                            <Link
-                              key={campaign.id}
-                              href={`/campaigns/${campaign.id}`}
-                              className="max-w-full truncate rounded-md border border-accent/15 bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent hover:border-accent/30"
-                            >
-                              {campaign.name}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="relative z-10">
-                      <Menu
-                        align="right"
-                        width="w-44"
-                        items={[
-                          { label: "Open", onSelect: () => router.push(`/flows/${flow.id}`) },
-                          { label: "Duplicate", onSelect: () => void duplicateFlow(flow) },
-                          {
-                            label: "Use in a campaign",
-                            onSelect: () => router.push(`/campaigns/new?flowId=${flow.id}`),
-                          },
-                          { label: "Delete", tone: "danger", onSelect: () => void deleteFlow(flow) },
-                        ]}
-                        trigger={(props) => (
-                          <IconButton label={`Actions for ${flow.name}`} {...props}>
-                            <Icon.more className="h-4 w-4" />
-                          </IconButton>
-                        )}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
+        <ul className="overflow-hidden rounded-2xl border border-border bg-surface">
+          <li className="hidden grid-cols-[minmax(0,1fr)_88px_112px_120px_44px] gap-4 border-b border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-faint md:grid">
+            <span>Name</span>
+            <span>Status</span>
+            <span className="text-right">Runs</span>
+            <span>Updated</span>
+            <span className="sr-only">Actions</span>
+          </li>
+          {rows.map((row) =>
+            row.kind === "flow" ? (
+              <FlowRow
+                key={row.flow.id}
+                flow={row.flow}
+                showAccount={accounts.length > 1}
+                onOpen={() => router.push(`/flows/${row.flow.id}`)}
+                onDuplicate={() => void duplicateFlow(row.flow)}
+                onDelete={() => void deleteFlow(row.flow)}
+              />
+            ) : (
+              <ClassicRow
+                key={row.campaign.id}
+                campaign={row.campaign}
+                showAccount={accounts.length > 1}
+                onStats={() => router.push(`/campaigns/${row.campaign.id}`)}
+                onDelete={() => void deleteClassic(row.campaign)}
+              />
+            )
+          )}
         </ul>
       )}
     </div>
+  );
+}
+
+const ROW = "relative grid gap-x-4 gap-y-1.5 border-b border-border px-4 py-3.5 last:border-b-0 transition-colors duration-150 hover:bg-surface-hover/60 md:grid-cols-[minmax(0,1fr)_88px_112px_120px_44px] md:items-center";
+
+function FlowRow({
+  flow,
+  showAccount,
+  onOpen,
+  onDuplicate,
+  onDelete,
+}: {
+  flow: FlowListItem;
+  showAccount: boolean;
+  onOpen: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const summary = summarizeEditorTriggers(flow.triggers);
+  return (
+    <li className={ROW}>
+      <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <Link
+            href={`/flows/${flow.id}`}
+            className="min-w-0 truncate text-sm font-semibold tracking-[-0.01em] text-foreground after:absolute after:inset-0 after:content-['']"
+          >
+            {flow.name}
+          </Link>
+          <span className="md:hidden">
+            <Badge status={flow.status} />
+          </span>
+          {showAccount && (
+            <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted">@{flow.instagramAccount.username}</span>
+          )}
+        </div>
+        <p className="truncate text-[13px] text-muted">{summary || "No trigger yet"}</p>
+        {flow.firstText && <p className="truncate text-xs text-faint">&ldquo;{flow.firstText}&rdquo;</p>}
+      </div>
+      <span className="hidden md:block">
+        <Badge status={flow.status} />
+      </span>
+      <span className="text-xs tabular-nums text-muted md:text-right">
+        <span className="font-medium text-foreground">{flow.totalRuns}</span> {flow.totalRuns === 1 ? "run" : "runs"}
+        {flow.activeRuns > 0 && <span className="block text-[11px] text-faint">{flow.activeRuns} in progress</span>}
+        {flow.sends > 0 && <span className="block text-[11px] text-faint">{flow.sends} {flow.sends === 1 ? "send" : "sends"}</span>}
+      </span>
+      <span className="text-xs text-faint">Updated {relativeTime(flow.updatedAt)}</span>
+      <div className="absolute right-2 top-2.5 z-10 md:static">
+        <Menu
+          align="right"
+          width="w-44"
+          items={[
+            { label: "Open", onSelect: onOpen },
+            { label: "Duplicate", onSelect: onDuplicate },
+            { label: "Delete", tone: "danger", hint: "Asks first", onSelect: onDelete },
+          ]}
+          trigger={(props) => (
+            <IconButton label={`Actions for ${flow.name}`} {...props}>
+              <Icon.more className="h-4 w-4" />
+            </IconButton>
+          )}
+        />
+      </div>
+    </li>
+  );
+}
+
+function ClassicRow({
+  campaign,
+  showAccount,
+  onStats,
+  onDelete,
+}: {
+  campaign: ClassicCampaignItem;
+  showAccount: boolean;
+  onStats: () => void;
+  onDelete: () => void;
+}) {
+  const status = campaign.isActive ? "ACTIVE" : "PAUSED";
+  return (
+    <li className={ROW}>
+      <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <Link
+            href={`/campaigns/${campaign.id}/edit`}
+            className="min-w-0 truncate text-sm font-semibold tracking-[-0.01em] text-foreground after:absolute after:inset-0 after:content-['']"
+          >
+            {campaign.name}
+          </Link>
+          <span
+            className="shrink-0 rounded-md border border-border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted"
+            title="A comment campaign from before flows. It opens in the campaign editor."
+          >
+            Classic
+          </span>
+          <span className="md:hidden">
+            <Badge status={status} />
+          </span>
+          {showAccount && (
+            <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted">@{campaign.instagramAccount.username}</span>
+          )}
+        </div>
+        <p className="truncate text-[13px] text-muted">{describeEditorTrigger(campaign.trigger)}</p>
+        {campaign.dmMessage && <p className="truncate text-xs text-faint">&ldquo;{campaign.dmMessage}&rdquo;</p>}
+      </div>
+      <span className="hidden md:block">
+        <Badge status={status} />
+      </span>
+      <span className="text-xs tabular-nums text-muted md:text-right">
+        <span className="font-medium text-foreground">{campaign.sends}</span> {campaign.sends === 1 ? "send" : "sends"}
+      </span>
+      <span className="text-xs text-faint">Updated {relativeTime(campaign.updatedAt)}</span>
+      <div className="absolute right-2 top-2.5 z-10 md:static">
+        <Menu
+          align="right"
+          width="w-44"
+          items={[
+            { label: "Stats", onSelect: onStats },
+            { label: "Delete", tone: "danger", hint: "Asks first", onSelect: onDelete },
+          ]}
+          trigger={(props) => (
+            <IconButton label={`Actions for ${campaign.name}`} {...props}>
+              <Icon.more className="h-4 w-4" />
+            </IconButton>
+          )}
+        />
+      </div>
+    </li>
   );
 }

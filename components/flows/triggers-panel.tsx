@@ -1,24 +1,23 @@
 "use client";
 
 /**
- * "Starts when" panel: the DM-side triggers stored on the flow, plus the
- * comment campaigns that run it (comment triggers live on the campaign).
+ * Editors for the DM-side triggers stored on Flow.triggers (DM keyword,
+ * story reply and mention, ig.me ref link, welcome, default reply, new
+ * follower). The canvas trigger sidebar lists them next to comment
+ * triggers (comment-trigger-editor.tsx).
  */
 
-import Link from "next/link";
 import { useState } from "react";
 import KeywordInput from "@/components/keyword-input";
 import type { FlowTrigger, FlowTriggerType, KeywordMatch } from "@/lib/flows/types";
-import { FLOW_EDITOR_LIMITS, TRIGGER_TYPE_LABELS } from "@/lib/flows/validate";
-import type { FlowCampaignRef } from "./api-types";
-import { createTrigger } from "./graph-utils";
+import { FLOW_EDITOR_LIMITS } from "@/lib/flows/validate";
 import { Icon } from "./icons";
-import { Button, IconButton, IssueList, Menu, Segmented, Select, TextField, ToggleRow } from "./ui";
+import { Button, Segmented, Select, TextField, ToggleRow } from "./ui";
 
 export const NEW_FOLLOWER_NOTE =
   "Instagram only offers this to Meta partners right now. OpenSetter will start it automatically if Meta enables follow events for this app.";
 
-const TRIGGER_HINTS: Record<FlowTriggerType, string> = {
+export const TRIGGER_HINTS: Record<FlowTriggerType, string> = {
   dm_keyword: "They send you a DM with a keyword",
   story_reply: "They reply to one of your stories",
   story_mention: "They mention you in their story",
@@ -28,7 +27,7 @@ const TRIGGER_HINTS: Record<FlowTriggerType, string> = {
   new_follower: NEW_FOLLOWER_NOTE,
 };
 
-const TRIGGER_ORDER: FlowTriggerType[] = [
+export const TRIGGER_ORDER: FlowTriggerType[] = [
   "dm_keyword",
   "story_reply",
   "story_mention",
@@ -38,7 +37,7 @@ const TRIGGER_ORDER: FlowTriggerType[] = [
   "new_follower",
 ];
 
-const SINGLETONS: FlowTriggerType[] = ["welcome", "default_reply", "story_mention", "new_follower"];
+export const SINGLETONS: FlowTriggerType[] = ["welcome", "default_reply", "story_mention", "new_follower"];
 
 const MATCH_OPTIONS: { value: KeywordMatch; label: string }[] = [
   { value: "contains", label: "Contains" },
@@ -72,7 +71,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function TriggerFields({
+export function TriggerFields({
   trigger,
   username,
   onChange,
@@ -202,122 +201,4 @@ function TriggerFields({
     case "new_follower":
       return <p className="text-xs leading-relaxed text-muted">{NEW_FOLLOWER_NOTE}</p>;
   }
-}
-
-export function TriggersPanel({
-  triggers,
-  onChange,
-  username,
-  campaigns,
-  flowId,
-  issuesByTrigger,
-  generalTriggerErrors,
-}: {
-  triggers: FlowTrigger[];
-  onChange: (triggers: FlowTrigger[]) => void;
-  username: string;
-  campaigns: FlowCampaignRef[];
-  flowId: string;
-  issuesByTrigger: Map<string, string[]>;
-  generalTriggerErrors: string[];
-}) {
-  const present = new Set(triggers.map((t) => t.type));
-  const update = (index: number, trigger: FlowTrigger) => onChange(triggers.map((t, i) => (i === index ? trigger : t)));
-
-  return (
-    <section aria-labelledby="flow-triggers" className="rounded-2xl border border-border bg-surface">
-      <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
-          <Icon.bolt className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 id="flow-triggers" className="text-sm font-semibold tracking-tight text-foreground">
-            Starts when
-          </h2>
-          <p className="text-xs text-muted">Comment triggers come from the campaigns below.</p>
-        </div>
-        {triggers.length < FLOW_EDITOR_LIMITS.triggersMax && (
-          <Menu
-            align="right"
-            width="w-72"
-            items={TRIGGER_ORDER.map((type) => ({
-              label: TRIGGER_TYPE_LABELS[type],
-              hint: TRIGGER_HINTS[type],
-              muted: type === "new_follower",
-              disabled: SINGLETONS.includes(type) && present.has(type),
-              onSelect: () => onChange([...triggers, createTrigger(type)]),
-            }))}
-            trigger={(props) => (
-              <Button size="sm" {...props}>
-                <Icon.plus className="h-3.5 w-3.5" />
-                Add trigger
-              </Button>
-            )}
-          />
-        )}
-      </header>
-
-      <div className="space-y-3 p-4">
-        <IssueList errors={generalTriggerErrors} />
-        {triggers.length === 0 && (
-          <p className="text-sm text-muted">
-            No DM triggers yet. Add one, link the flow to a comment campaign, or start it from another flow.
-          </p>
-        )}
-        {triggers.map((trigger, index) => {
-          const disabled = trigger.type === "new_follower";
-          return (
-            <div
-              key={trigger.id}
-              className={`space-y-3 rounded-xl border border-border p-3 ${disabled ? "bg-surface-hover/50" : ""}`}
-            >
-              <div className="flex items-start gap-2">
-                <div className={`min-w-0 flex-1 ${disabled ? "opacity-70" : ""}`}>
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
-                    {TRIGGER_TYPE_LABELS[trigger.type]}
-                    {disabled && (
-                      <span className="rounded-full bg-muted/15 px-2 py-0.5 text-[11px] font-medium text-muted">Not available yet</span>
-                    )}
-                  </p>
-                  {!disabled && <p className="text-xs text-muted">{TRIGGER_HINTS[trigger.type]}</p>}
-                </div>
-                <IconButton label="Remove trigger" tone="danger" onClick={() => onChange(triggers.filter((_, i) => i !== index))}>
-                  <Icon.trash className="h-3.5 w-3.5" />
-                </IconButton>
-              </div>
-              <TriggerFields trigger={trigger} username={username} onChange={(next) => update(index, next)} />
-              <IssueList errors={issuesByTrigger.get(trigger.id)} />
-            </div>
-          );
-        })}
-
-        <div className="space-y-2 rounded-xl border border-dashed border-border p-3">
-          <p className="text-sm font-medium text-foreground">Comment campaigns</p>
-          {campaigns.length === 0 ? (
-            <p className="text-xs text-muted">No campaign runs this flow yet.</p>
-          ) : (
-            <ul className="space-y-1">
-              {campaigns.map((campaign) => (
-                <li key={campaign.id} className="flex items-center justify-between gap-2">
-                  <Link href={`/campaigns/${campaign.id}`} className="min-h-11 min-w-0 truncate py-2 text-sm text-accent hover:underline sm:min-h-0 sm:py-0.5">
-                    {campaign.name}
-                  </Link>
-                  <span className={`shrink-0 text-xs ${campaign.isActive ? "text-success" : "text-muted"}`}>
-                    {campaign.isActive ? "Live" : "Paused"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Link
-            href={`/campaigns/new?flowId=${flowId}`}
-            className="inline-flex min-h-11 items-center gap-1.5 text-xs font-medium text-accent hover:underline sm:min-h-0"
-          >
-            <Icon.plus className="h-3.5 w-3.5" />
-            Use in a comment campaign
-          </Link>
-        </div>
-      </div>
-    </section>
-  );
 }

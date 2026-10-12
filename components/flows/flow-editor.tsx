@@ -1,479 +1,371 @@
 "use client";
 
 /**
- * Flow Editor
+ * Flow Editor (ManyChat-style canvas)
  *
- * A structured step editor (not a free canvas): triggers on top, then one
- * card per step with explicit routing pickers. The right column holds the
- * phone preview of the selected message, an overview map, run stats and
- * the variables list. Validation from lib/flows/validate runs live and is
- * shown next to the step it is about.
+ * A canvas of cards (components/flows/canvas): the "When..." trigger card
+ * on the left, one card per step, curved connections between their
+ * handles. The selected card is edited in a floating sidebar (a bottom
+ * sheet on phones) that reuses the step editors. A translucent top bar
+ * holds the name, status, save state, undo / redo, Preview and Set Live.
+ *
+ * The whole draft (graph, triggers, name) is one undoable document
+ * (canvas/use-flow-document). Drafts autosave; a live flow publishes on
+ * demand. Comment triggers are the flow's Automation rows, synced by the
+ * flow API.
  */
 
+import { ReactFlowProvider } from "@xyflow/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { FlowGraph, FlowNode, FlowNodeType, FlowTrigger } from "@/lib/flows/types";
-import {
-  FLOW_VARIABLES,
-  lintFlow,
-  NODE_TYPE_LABELS,
-  nodeDisplayName,
-  parseFlowGraphShape,
-  parseFlowTriggersShape,
-  triggerDisplayName,
-  validateFlowGraph,
-  validateFlowTriggers,
-  type FlowIssue,
-} from "@/lib/flows/validate";
-import type { FlowDetail, FlowStats, FlowStatusValue, FlowValidationPayload, MediaItem } from "./api-types";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMediaQuery } from "@/components/inbox/use-media-query";
+import { createCommentTrigger, isCommentTrigger, triggersForCopy } from "@/lib/flows/comment-triggers";
+import type { EditorTrigger, FlowGraph, FlowNode } from "@/lib/flows/types";
+import { FLOW_VARIABLES } from "@/lib/flows/validate";
 import { FlowEditorContext, type FlowEditorContextValue } from "./editor-context";
-import { FlowMap } from "./flow-map";
-import { FlowPreview } from "./flow-preview";
 import {
   addNode,
+  cloneNodeWithNewIds,
   collectFieldNames,
   collectTags,
   createNode,
-  duplicateNode,
-  moveNode,
+  newId,
   removeNode,
   replaceNode,
   stepOptions,
 } from "./graph-utils";
-import { Icon, NODE_TINTS, NodeTypeIcon } from "./icons";
-import { NodeCard } from "./node-card";
-import { NODE_TYPE_ORDER } from "./step-select";
-import { TriggersPanel } from "./triggers-panel";
-import { Button, IconButton, IssueList, Menu, PRESS, Segmented, StatusPill } from "./ui";
-import { VariablesPanel } from "./variables-panel";
+import { Icon } from "./icons";
+import type { CanvasContextValue } from "./canvas/canvas-context";
+import { EditorTopBar, type SaveIndicator } from "./canvas/editor-top-bar";
+import { FlowCanvas, type ConnectionSource } from "./canvas/flow-canvas";
+import { buildEditorIssues } from "./canvas/issues";
+import { IssuesPanel, type IssueTarget } from "./canvas/issues-panel";
+import { connectNodeOutput, connectOutput, outputTarget, positionAfter, TRIGGER_NODE_ID } from "./canvas/model";
+import { PreviewPanel } from "./canvas/preview-panel";
+import { BottomSheet, FloatingPanel, SNAP_HALF } from "./canvas/side-panel";
+import { StepInspector } from "./canvas/step-inspector";
+import type { StepPreset } from "./canvas/step-type-menu";
+import { stepTitle } from "./canvas/summaries";
+import { TriggerInspector } from "./canvas/trigger-inspector";
+import { useFlowDocument, type SaveMode } from "./canvas/use-flow-document";
+import { IssueList, PRESS } from "./ui";
 
-type SaveMode = "save" | "activate" | "pause";
-type Notice = { tone: "error" | "success" | "info"; text: string; undo?: () => void };
+type Panel = { kind: "node"; id: string } | { kind: "trigger" } | { kind: "issues" } | null;
+type Notice = { tone: "error" | "success" | "info"; text: string; undo?: boolean };
 
-const EMPTY_GRAPH: FlowGraph = { startNodeId: null, nodes: [] };
+/** Floating top bar height plus its margins. */
+const TOP_CHROME = { desktop: 80, phone: 72 };
+const PANEL_WIDTH = 400;
 
-const NODE_TYPE_HINTS: Record<FlowNodeType, string> = {
-  message: "Text, media, cards, buttons",
-  input: "Ask for an email, phone or answer",
-  condition: "Branch on tags, fields, follows",
-  action: "Tags, fields, webhooks, AI",
-  delay: "Wait minutes or hours",
-  randomizer: "Split people for A/B tests",
-  start_flow: "Jump into another flow",
-  ai_handoff: "Let the AI setter continue",
-};
-
-function snapshotOf(name: string, graph: FlowGraph, triggers: FlowTrigger[]): string {
-  return JSON.stringify({ name, graph, triggers });
+function isEditable(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return Boolean(el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)));
 }
 
-/** "Step 3 (Message): block 1 text is empty." -> "Block 1 text is empty." */
-function withoutPrefix(message: string, prefix: string): string {
-  if (!message.startsWith(`${prefix}: `)) return message;
-  const rest = message.slice(prefix.length + 2);
-  return rest.charAt(0).toUpperCase() + rest.slice(1);
+/** The editor covers the dashboard content area, below the app's top bar. */
+function useEditorFrame(anchor: React.RefObject<HTMLDivElement | null>) {
+  const [frame, setFrame] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = anchor.current;
+    const main = el?.closest("main");
+    if (!el || !main) return;
+    const header = main.querySelector<HTMLElement>(":scope > header");
+    const measure = () => {
+      const box = main.getBoundingClientRect();
+      const top = header ? header.getBoundingClientRect().bottom : el.getBoundingClientRect().top;
+      setFrame({ top, left: box.left, width: box.width, height: window.innerHeight - top });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(main);
+    if (header) observer.observe(header);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [anchor]);
+  return frame;
 }
 
-function prefersReducedMotion(): boolean {
-  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function UndoGlyph({ flip }: { flip?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={`h-4 w-4 ${flip ? "-scale-x-100" : ""}`} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 14L4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 010 11H11" />
+    </svg>
+  );
 }
 
-function scrollToNode(id: string) {
-  window.setTimeout(() => {
-    document
-      .getElementById(`flow-node-${id}`)
-      ?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
-  }, 60);
+function nodeFromPreset(preset: StepPreset): FlowNode {
+  const node = createNode(preset.type);
+  if (node.type === "input" && preset.type === "input") {
+    const saveTo =
+      preset.inputType === "email" || preset.inputType === "phone"
+        ? preset.inputType
+        : `field:${preset.inputType === "number" ? "number" : preset.inputType === "url" ? "link" : "answer"}`;
+    return { ...node, inputType: preset.inputType, saveTo };
+  }
+  return node;
 }
 
 export default function FlowEditor({ flowId }: { flowId: string }) {
   const router = useRouter();
+  const doc = useFlowDocument(flowId);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const frame = useEditorFrame(anchorRef);
+  const phone = useMediaQuery("(max-width: 767px)");
 
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [shapeErrors, setShapeErrors] = useState<string[]>([]);
-  const [meta, setMeta] = useState<FlowDetail | null>(null);
-  const [name, setName] = useState("");
-  const [graph, setGraph] = useState<FlowGraph>(EMPTY_GRAPH);
-  const [triggers, setTriggers] = useState<FlowTrigger[]>([]);
-  const [savedSnapshot, setSavedSnapshot] = useState("");
-  // Database checks from the last load or save (deleted media, other flows).
-  const [serverErrors, setServerErrors] = useState<FlowIssue[]>([]);
-  const [serverWarnings, setServerWarnings] = useState<FlowIssue[]>([]);
-  const [saving, setSaving] = useState<SaveMode | null>(null);
+  const [panel, setPanel] = useState<Panel>(null);
+  const [expandedTrigger, setExpandedTrigger] = useState<string | null>(null);
+  const [triggerMenuOpen, setTriggerMenuOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const [sideTab, setSideTab] = useState<"preview" | "map">("preview");
-  const [flows, setFlows] = useState<{ id: string; name: string; status: FlowStatusValue }[]>([]);
-  const [media, setMedia] = useState<MediaItem[]>([]);
-  const [stats, setStats] = useState<FlowStats | null>(null);
-  const [statsDays, setStatsDays] = useState<"7" | "30" | "all">("30");
+  const [busy, setBusy] = useState<SaveMode | null>(null);
+  const [sheetHeight, setSheetHeight] = useState(0);
   const noticeTimer = useRef<number | null>(null);
+  const appliedParams = useRef(false);
+
+  const { draft, commit, meta, status } = doc;
+  const graph = draft.graph;
+  const triggers = draft.triggers;
+  const commentTriggered = triggers.some(isCommentTrigger);
 
   function showNotice(next: Notice | null, autoHideMs = 0) {
     if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
     setNotice(next);
-    if (next && autoHideMs > 0) {
-      noticeTimer.current = window.setTimeout(() => setNotice(null), autoHideMs);
-    }
+    if (next && autoHideMs > 0) noticeTimer.current = window.setTimeout(() => setNotice(null), autoHideMs);
   }
 
-  // ─── Loading ────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/flows/${flowId}`, { cache: "no-store" })
-      .then(async (res) => {
-        const payload = await res.json().catch(() => null);
-        if (!res.ok || !payload?.success) throw new Error(payload?.error ?? "Flow not found");
-        return payload as { data: FlowDetail; validation: FlowValidationPayload };
-      })
-      .then(({ data, validation }) => {
-        if (cancelled) return;
-        const parsedGraph = parseFlowGraphShape(data.graph);
-        const parsedTriggers = parseFlowTriggersShape(data.triggers);
-        setMeta(data);
-        setName(data.name);
-        if (!parsedGraph.ok || !parsedTriggers.ok) {
-          setShapeErrors([...(parsedGraph.ok ? [] : parsedGraph.errors), ...(parsedTriggers.ok ? [] : parsedTriggers.errors)]);
-          return;
-        }
-        setGraph(parsedGraph.value);
-        setTriggers(parsedTriggers.value);
-        setSelectedId(parsedGraph.value.startNodeId);
-        setSavedSnapshot(snapshotOf(data.name, parsedGraph.value, parsedTriggers.value));
-        setServerErrors(validation?.serverErrors ?? []);
-        setServerWarnings(validation?.serverWarnings ?? []);
-      })
-      .catch((error: Error) => {
-        if (!cancelled) setLoadError(error.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [flowId]);
-
-  const accountId = meta?.instagramAccountId;
-  useEffect(() => {
-    if (!accountId) return;
-    let cancelled = false;
-    fetch(`/api/flows?instagramAccountId=${encodeURIComponent(accountId)}`, { cache: "no-store" })
-      .then((res) => res.json())
-      .then((payload) => {
-        if (cancelled || !payload?.success) return;
-        setFlows(
-          (payload.data as { id: string; name: string; status: FlowStatusValue }[]).map(({ id, name: flowName, status }) => ({
-            id,
-            name: flowName,
-            status,
-          }))
-        );
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [accountId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/media", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((payload) => {
-        if (!cancelled && payload?.success) setMedia(payload.data as MediaItem[]);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const query = statsDays === "all" ? "" : `?days=${statsDays}`;
-    fetch(`/api/flows/${flowId}/stats${query}`, { cache: "no-store" })
-      .then((res) => res.json())
-      .then((payload) => {
-        if (!cancelled && payload?.success) setStats(payload.data as FlowStats);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [flowId, statsDays]);
-
-  // ─── Derived state ──────────────────────────────────────────────────────
-
-  const snapshot = snapshotOf(name, graph, triggers);
-  const dirty = !loading && !shapeErrors.length && meta !== null && snapshot !== savedSnapshot;
-  const status: FlowStatusValue = meta?.status ?? "DRAFT";
-  const commentTriggered = (meta?.automations.length ?? 0) > 0;
-
-  const localErrors = useMemo(() => [...validateFlowGraph(graph), ...validateFlowTriggers(triggers)], [graph, triggers]);
-  const warnings = useMemo(
-    () => [...lintFlow(graph, { commentTriggered }), ...serverWarnings],
-    [graph, commentTriggered, serverWarnings]
+  const issues = useMemo(
+    () => buildEditorIssues({ graph, triggers, serverErrors: doc.serverErrors, serverWarnings: doc.serverWarnings }),
+    [graph, triggers, doc.serverErrors, doc.serverWarnings]
   );
-  const errors = useMemo(
-    () => [...localErrors, ...serverErrors.filter((s) => !localErrors.some((l) => l.message === s.message))],
-    [localErrors, serverErrors]
-  );
-
-  const issues = useMemo(() => {
-    const byNode = new Map<string, { errors: string[]; warnings: string[] }>();
-    const byTrigger = new Map<string, string[]>();
-    const general: string[] = [];
-    const generalWarnings: string[] = [];
-    const labels = new Map(graph.nodes.map((node, index) => [node.id, nodeDisplayName(node, index)] as const));
-    const triggerLabels = new Map(triggers.map((t, index) => [t.id, triggerDisplayName(t, index)] as const));
-    const bucket = (id: string) => {
-      const entry = byNode.get(id) ?? { errors: [], warnings: [] };
-      byNode.set(id, entry);
-      return entry;
-    };
-    for (const issue of errors) {
-      if (issue.nodeId && labels.has(issue.nodeId)) {
-        bucket(issue.nodeId).errors.push(withoutPrefix(issue.message, labels.get(issue.nodeId) as string));
-      } else if (issue.triggerId && triggerLabels.has(issue.triggerId)) {
-        const list = byTrigger.get(issue.triggerId) ?? [];
-        list.push(withoutPrefix(issue.message, triggerLabels.get(issue.triggerId) as string));
-        byTrigger.set(issue.triggerId, list);
-      } else {
-        general.push(issue.message);
-      }
-    }
-    for (const issue of warnings) {
-      if (issue.nodeId && labels.has(issue.nodeId)) {
-        bucket(issue.nodeId).warnings.push(withoutPrefix(issue.message, labels.get(issue.nodeId) as string));
-      } else {
-        generalWarnings.push(issue.message);
-      }
-    }
-    return { byNode, byTrigger, general, generalWarnings };
-  }, [errors, warnings, graph.nodes, triggers]);
-
-  const errorNodeIds = useMemo(() => new Set(issues.byNode.keys()), [issues]);
-  const selectedNode = graph.nodes.find((n) => n.id === selectedId);
-  const previewNode =
-    selectedNode && (selectedNode.type === "message" || selectedNode.type === "input")
-      ? selectedNode
-      : graph.nodes.find((n) => n.id === graph.startNodeId && n.type === "message") ?? selectedNode;
-
-  const mediaById = useMemo(() => new Map(media.map((m) => [m.id, m] as const)), [media]);
-  const fieldNames = useMemo(() => collectFieldNames(graph), [graph]);
-  const tags = useMemo(() => collectTags(graph), [graph]);
-  const username = meta?.instagramAccount.username ?? "yourbrand";
 
   // ─── Editing ────────────────────────────────────────────────────────────
 
-  function createStep(type: FlowNodeType, afterId?: string): string {
-    const node = createNode(type);
-    setGraph((g) => addNode(g, node, afterId));
-    return node.id;
-  }
+  const updateGraph = (update: (g: FlowGraph) => FlowGraph, key: string | null) =>
+    commit((d) => {
+      const next = update(d.graph);
+      return next === d.graph ? d : { ...d, graph: next };
+    }, key);
 
-  function addStepAtEnd(type: FlowNodeType) {
-    const id = createStep(type);
-    setSelectedId(id);
-    scrollToNode(id);
-  }
-
-  function updateNode(id: string, node: FlowNode) {
-    setGraph((g) => replaceNode(g, id, node));
-  }
-
-  function deleteStep(id: string) {
-    const before = graph;
-    setGraph((g) => removeNode(g, id));
-    showNotice({ tone: "info", text: "Step deleted", undo: () => setGraph(before) }, 6000);
-  }
-
-  function duplicateStep(id: string) {
-    const result = duplicateNode(graph, id);
-    setGraph(result.graph);
-    if (result.copyId) {
-      setSelectedId(result.copyId);
-      scrollToNode(result.copyId);
+  function select(id: string | null) {
+    if (id === null) setPanel(null);
+    else if (id === TRIGGER_NODE_ID) {
+      setPanel({ kind: "trigger" });
+      // A single trigger opens expanded.
+      setExpandedTrigger((current) => current ?? (triggers.length === 1 ? triggers[0].id : null));
+    }
+    else {
+      setPanel({ kind: "node", id });
+      setPreviewId(id);
     }
   }
 
-  function toggleCollapsed(id: string) {
-    setCollapsed((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  function addStep(preset: StepPreset, from: ConnectionSource | null, position: { x: number; y: number }) {
+    const node = { ...nodeFromPreset(preset), position: { x: Math.round(position.x), y: Math.round(position.y) } };
+    updateGraph((g) => {
+      const added = addNode(g, node);
+      return from ? connectOutput(added, from.source, from.handle, node.id) : added;
+    }, null);
+    select(node.id);
   }
 
-  function revealNode(id: string) {
-    setSelectedId(id);
-    setCollapsed((current) => {
-      if (!current.has(id)) return current;
-      const next = new Set(current);
-      next.delete(id);
-      return next;
-    });
-    scrollToNode(id);
+  /** Palette "Data Collection" / "More": a new step right after this one, keeping what came next. */
+  function addAfter(sourceId: string, preset: StepPreset) {
+    const base = nodeFromPreset(preset);
+    updateGraph((g) => {
+      const previous = outputTarget(g, sourceId, "next");
+      const node = { ...connectNodeOutput(base, "next", previous), position: positionAfter(g, sourceId) };
+      return connectOutput(addNode(g, node), sourceId, "next", node.id);
+    }, null);
+    select(base.id);
   }
 
-  async function uploadMedia(file: File): Promise<MediaItem> {
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch("/api/media", { method: "POST", body: form });
-    const payload = await res.json().catch(() => null);
-    if (!res.ok || !payload?.success) throw new Error(payload?.error ?? "Upload failed");
-    const item = payload.data as MediaItem;
-    setMedia((current) => [item, ...current]);
-    return item;
+  function deleteNodes(ids: string[]) {
+    if (ids.length === 0) return;
+    updateGraph((g) => ids.reduce((acc, id) => removeNode(acc, id), g), null);
+    if (panel?.kind === "node" && ids.includes(panel.id)) setPanel(null);
+    showNotice({ tone: "info", text: ids.length === 1 ? "Step deleted" : `${ids.length} steps deleted`, undo: true }, 6000);
   }
 
-  // ─── Saving ─────────────────────────────────────────────────────────────
+  function duplicateStep(id: string) {
+    const original = graph.nodes.find((n) => n.id === id);
+    if (!original) return;
+    const copy = cloneNodeWithNewIds(original);
+    const at = original.position ?? { x: 0, y: 0 };
+    updateGraph((g) => addNode(g, { ...copy, position: { x: at.x + 40, y: at.y + 40 } }, id), null);
+    select(copy.id);
+  }
 
-  async function persist(mode: SaveMode) {
-    if (saving) return;
-    const sentName = name.trim() || "Untitled flow";
-    const sentGraph = graph;
-    const sentTriggers = triggers;
-    const body: Record<string, unknown> = { name: sentName, graph: sentGraph, triggers: sentTriggers };
-    if (mode === "activate") body.status = "ACTIVE";
-    if (mode === "pause") body.status = "PAUSED";
+  const createStep = (type: FlowNode["type"], afterId?: string): string => {
+    const node = createNode(type);
+    updateGraph((g) => addNode(g, { ...node, position: positionAfter(g, afterId ?? null) }, afterId), null);
+    return node.id;
+  };
 
-    setSaving(mode);
-    showNotice(null);
+  function updateTriggers(next: EditorTrigger[], key: string | null) {
+    commit((d) => ({ ...d, triggers: next }), key);
+  }
+
+  function openTrigger(id: string | null, withMenu = false) {
+    setPanel({ kind: "trigger" });
+    if (id) setExpandedTrigger(id);
+    setTriggerMenuOpen(withMenu);
+  }
+
+  function openIssue(target: IssueTarget) {
+    if (!target) return;
+    if (target.kind === "trigger") openTrigger(target.id);
+    else select(target.id);
+  }
+
+  // ─── Saving and status ──────────────────────────────────────────────────
+
+  async function goLive(mode: "live" | "publish") {
+    if (issues.localErrors.length > 0 || issues.errors.length > 0) {
+      setPanel({ kind: "issues" });
+      return;
+    }
+    setBusy(mode);
+    const result = await doc.save(mode);
+    setBusy(null);
+    if (result.ok) {
+      showNotice({ tone: "success", text: mode === "live" ? "Flow is live" : "Changes published" }, 2600);
+      if (panel?.kind === "issues") setPanel(null);
+    } else {
+      if (result.validation?.errors?.length) setPanel({ kind: "issues" });
+      showNotice({ tone: "error", text: result.error ?? "Could not save the flow" });
+    }
+  }
+
+  async function pause() {
+    setBusy("pause");
+    const result = await doc.save("pause");
+    setBusy(null);
+    showNotice(result.ok ? { tone: "info", text: "Flow paused. Comment triggers are off." } : { tone: "error", text: result.error ?? "Could not pause" }, 3000);
+  }
+
+  async function duplicateFlow() {
+    if (!meta) return;
     try {
-      const res = await fetch(`/api/flows/${flowId}`, {
-        method: "PUT",
+      const res = await fetch("/api/flows", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          name: `${draft.name.trim() || "Untitled flow"} copy`.slice(0, 100),
+          instagramAccountId: meta.instagramAccountId,
+          graph,
+          triggers: triggersForCopy(triggers, () => newId("t")),
+        }),
       });
       const payload = await res.json().catch(() => null);
-      if (!res.ok || !payload?.success) {
-        if (payload?.validation) {
-          const validation = payload.validation as FlowValidationPayload;
-          setServerErrors(validation.serverErrors ?? []);
-          setServerWarnings(validation.serverWarnings ?? []);
-        }
-        showNotice({ tone: "error", text: payload?.error ?? "Could not save the flow" });
-        return;
-      }
-      const data = payload.data as FlowDetail;
-      setMeta(data);
-      if (sentName !== name) setName(sentName);
-      setSavedSnapshot(snapshotOf(sentName, sentGraph, sentTriggers));
-      const validation = payload.validation as FlowValidationPayload | undefined;
-      setServerErrors(validation?.serverErrors ?? []);
-      setServerWarnings(validation?.serverWarnings ?? []);
-      showNotice(
-        { tone: "success", text: mode === "activate" ? "Flow is active" : mode === "pause" ? "Flow paused" : "Saved" },
-        2500
-      );
-    } catch {
-      showNotice({ tone: "error", text: "Could not reach the server. Your changes are still here." });
-    } finally {
-      setSaving(null);
+      if (!res.ok || !payload?.success) throw new Error(payload?.error ?? "Could not duplicate the flow");
+      router.push(`/flows/${payload.data.id}`);
+    } catch (error) {
+      showNotice({ tone: "error", text: error instanceof Error ? error.message : "Could not duplicate the flow" });
     }
   }
 
   async function deleteFlow() {
-    if (!window.confirm("Delete this flow? Runs in progress stop. This cannot be undone.")) return;
+    const comments = triggers.filter(isCommentTrigger).length;
+    const extra =
+      comments > 0
+        ? ` Its ${comments === 1 ? "comment trigger and its" : `${comments} comment triggers and their`} send history are deleted too.`
+        : "";
+    if (!window.confirm(`Delete "${draft.name || "Untitled flow"}"?${extra} Runs in progress stop. This cannot be undone.`)) return;
     try {
       const res = await fetch(`/api/flows/${flowId}`, { method: "DELETE" });
       const payload = await res.json().catch(() => null);
-      if (!res.ok || !payload?.success) {
-        showNotice({ tone: "error", text: payload?.error ?? "Could not delete the flow" });
-        return;
-      }
-      setSavedSnapshot(snapshot);
+      if (!res.ok || !payload?.success) throw new Error(payload?.error ?? "Could not delete the flow");
       router.push("/flows");
       router.refresh();
-    } catch {
-      showNotice({ tone: "error", text: "Could not reach the server." });
+    } catch (error) {
+      showNotice({ tone: "error", text: error instanceof Error ? error.message : "Could not delete the flow" });
     }
   }
 
-  const canSave = dirty && !saving && !(status === "ACTIVE" && localErrors.length > 0);
+  // ─── Keyboard and URL ───────────────────────────────────────────────────
 
-  // Cmd/Ctrl+S saves; the ref always holds the latest handler.
-  const saveRef = useRef<() => void>(() => undefined);
+  const keysRef = useRef<(event: KeyboardEvent) => void>(() => undefined);
   useEffect(() => {
-    saveRef.current = () => {
-      if (canSave) void persist("save");
+    keysRef.current = (event) => {
+      const mod = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      if (mod && key === "s") {
+        event.preventDefault();
+        if (status === "ACTIVE") void goLive("publish");
+        else void doc.save("auto");
+        return;
+      }
+      if (isEditable(event.target)) return;
+      if (mod && key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) doc.redo();
+        else doc.undo();
+      } else if (mod && key === "y") {
+        event.preventDefault();
+        doc.redo();
+      } else if (key === "escape" && panel) {
+        setPanel(null);
+      }
     };
   });
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        saveRef.current();
-      }
-    };
+    const onKeyDown = (event: KeyboardEvent) => keysRef.current(event);
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const ready = !doc.loading && !doc.loadError && doc.shapeErrors.length === 0 && meta !== null;
+  // ?trigger=<automationId> (campaign stats, old edit links), ?add=comment
+  // ("use in a campaign"), ?select=trigger (new flow from a template).
   useEffect(() => {
-    if (!dirty) return;
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [dirty]);
+    if (!ready || appliedParams.current) return;
+    appliedParams.current = true;
+    const params = new URLSearchParams(window.location.search);
+    if (params.size === 0) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    // Not cleared on re-render: this effect runs once per page load.
+    window.setTimeout(() => {
+      const trigger = params.get("trigger");
+      if (params.get("add") === "comment") {
+        const fresh = createCommentTrigger(newId("t"));
+        updateTriggers([...triggers.filter(isCommentTrigger), fresh, ...triggers.filter((t) => !isCommentTrigger(t))], null);
+        openTrigger(fresh.id);
+      } else if (trigger) openTrigger(trigger);
+      else if (params.get("select") === "trigger") openTrigger(triggers.find(isCommentTrigger)?.id ?? null);
+    }, 0);
+  });
 
   // ─── Render ─────────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <div className="panel h-14 rounded-2xl" />
-        <div className="panel h-40 rounded-2xl" />
-        <div className="panel h-64 rounded-2xl" />
-      </div>
-    );
-  }
+  const top = phone ? TOP_CHROME.phone : TOP_CHROME.desktop;
+  const panelOpen = panel !== null;
+  const insets = phone
+    ? // Before the sheet reports its height, assume the half-height snap.
+      { top, left: 0, right: 0, bottom: panelOpen ? Math.max(sheetHeight, (frame?.height ?? 0) * SNAP_HALF) : 0 }
+    : { top, left: panelOpen ? PANEL_WIDTH + 24 : 0, right: previewOpen ? 376 : 0, bottom: 72 };
 
-  if (loadError || !meta) {
-    return (
-      <div className="panel rounded-2xl p-8 text-center">
-        <p className="text-sm text-muted">{loadError ?? "Flow not found."}</p>
-        <Link href="/flows" className={`mt-4 inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm text-muted hover:text-foreground sm:min-h-9 ${PRESS}`}>
-          Back to flows
-        </Link>
-      </div>
-    );
-  }
+  const selectedNode = panel?.kind === "node" ? graph.nodes.find((n) => n.id === panel.id) : undefined;
+  const selectedId = panel?.kind === "node" ? panel.id : panel?.kind === "trigger" ? TRIGGER_NODE_ID : null;
+  const mediaById = useMemo(() => new Map(doc.media.map((m) => [m.id, m] as const)), [doc.media]);
+  const fieldNames = useMemo(() => collectFieldNames(graph), [graph]);
+  const tags = useMemo(() => collectTags(graph), [graph]);
+  const username = meta?.instagramAccount.username ?? "yourbrand";
+  const startNode = graph.nodes.find((n) => n.id === graph.startNodeId);
 
-  if (shapeErrors.length > 0) {
-    return (
-      <div className="space-y-4">
-        <Link href="/flows" className="inline-flex min-h-11 items-center text-sm text-muted hover:text-foreground sm:min-h-0">
-          &larr; Flows
-        </Link>
-        <div className="rounded-2xl border border-error/30 bg-error/5 p-5">
-          <h1 className="text-base font-semibold tracking-tight text-foreground">This flow&apos;s data could not be read</h1>
-          <p className="mt-1 text-sm text-muted">The editor stays read-only so nothing gets overwritten.</p>
-          <div className="mt-4">
-            <IssueList errors={shapeErrors} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const contextValue: FlowEditorContextValue = {
+  const editorContext: FlowEditorContextValue = {
     flowId,
     steps: stepOptions(graph),
     createStep,
-    flows,
-    media,
+    flows: doc.flows,
+    media: doc.media,
     mediaById,
-    uploadMedia,
+    uploadMedia: doc.uploadMedia,
     variables: [
       ...FLOW_VARIABLES.filter((v) => v.token !== "{{field.<name>}}").map((v) => v.token),
       ...fieldNames.map((field) => `{{field.${field}}}`),
@@ -481,298 +373,267 @@ export default function FlowEditor({ flowId }: { flowId: string }) {
     ],
     fieldNames,
     tags,
-    stats,
+    stats: doc.stats,
     username,
   };
 
-  const errorCount = errors.length;
-  const warningCount = warnings.length;
-  const firstIssueNode = graph.nodes.find((n) => issues.byNode.has(n.id));
-  const runs = stats?.runs;
+  const canvasContext: CanvasContextValue = {
+    triggers,
+    triggerErrorIds: issues.triggerErrorIds,
+    mediaById,
+    flowNames: new Map(doc.flows.map((f) => [f.id, f.name] as const)),
+    nodeStats: doc.stats?.nodes ?? null,
+    onAddTrigger: () => openTrigger(null, true),
+  };
 
-  return (
-    <FlowEditorContext.Provider value={contextValue}>
-      <div className="space-y-5">
-        {/* Toolbar: a translucent layer the steps scroll under. */}
-        <div className="sticky top-0 z-30 -mx-4 -mt-6 border-b border-border bg-background/80 px-4 py-3 backdrop-blur-xl backdrop-saturate-150 lg:-mx-8 lg:px-8 [@media(prefers-reduced-transparency:reduce)]:bg-background [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <Link
-              href="/flows"
-              className="inline-flex min-h-11 shrink-0 items-center text-sm text-muted hover:text-foreground sm:min-h-0"
-            >
-              &larr; Flows
-            </Link>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={100}
-              aria-label="Flow name"
-              placeholder="Untitled flow"
-              className="min-w-0 flex-1 basis-40 rounded-md border border-transparent bg-transparent px-1.5 py-1 text-base font-semibold tracking-tight text-foreground placeholder:text-faint hover:border-border focus:border-accent/40 focus:outline-none sm:text-lg"
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusPill status={status} />
-              {dirty && (
-                <span className="inline-flex items-center gap-1.5 text-xs text-muted" aria-live="polite">
-                  <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-hidden="true" />
-                  Unsaved
-                </span>
-              )}
-              {(errorCount > 0 || warningCount > 0) && (
-                <button
-                  type="button"
-                  onClick={() => firstIssueNode && revealNode(firstIssueNode.id)}
-                  className={`inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-2.5 text-xs sm:min-h-7 ${PRESS} hover:border-border-hover`}
-                >
-                  {errorCount > 0 && (
-                    <span className="text-error">
-                      {errorCount} {errorCount === 1 ? "error" : "errors"}
-                    </span>
-                  )}
-                  {warningCount > 0 && (
-                    <span className="text-warning">
-                      {warningCount} {warningCount === 1 ? "warning" : "warnings"}
-                    </span>
-                  )}
-                </button>
-              )}
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              {status === "ACTIVE" ? (
-                <Button onClick={() => void persist("pause")} disabled={Boolean(saving)}>
-                  {saving === "pause" ? "Pausing…" : "Pause"}
-                </Button>
-              ) : (
-                <Button
-                  variant="success"
-                  onClick={() => void persist("activate")}
-                  disabled={Boolean(saving) || localErrors.length > 0}
-                  title={localErrors.length > 0 ? `Fix ${localErrors.length} ${localErrors.length === 1 ? "error" : "errors"} first` : undefined}
-                >
-                  {saving === "activate" ? "Activating…" : dirty ? "Save and activate" : "Activate"}
-                </Button>
-              )}
-              <Button
-                variant="primary"
-                onClick={() => void persist("save")}
-                disabled={!canSave}
-                title={status === "ACTIVE" && localErrors.length > 0 ? "Fix the errors or pause the flow to save" : "Save (Cmd+S)"}
-              >
-                {saving === "save" ? "Saving…" : dirty ? "Save" : "Saved"}
-              </Button>
-              <Menu
-                align="right"
-                items={[
-                  {
-                    label: "Delete flow",
-                    tone: "danger",
-                    hint: meta.automations.length > 0 ? "Unlink its campaigns first." : undefined,
-                    onSelect: () => void deleteFlow(),
-                    icon: <Icon.trash className="h-4 w-4" />,
-                  },
-                ]}
-                trigger={(props) => (
-                  <IconButton label="More flow actions" {...props}>
-                    <Icon.more className="h-4 w-4" />
-                  </IconButton>
-                )}
-              />
-            </div>
-          </div>
-        </div>
+  const saveIndicator: SaveIndicator =
+    doc.saveState === "saving"
+      ? { kind: "saving" }
+      : doc.saveState === "error" && doc.dirty
+        ? { kind: "error", text: doc.saveError ?? "Not saved" }
+        : doc.dirty
+          ? status === "ACTIVE"
+            ? { kind: "pending", text: "Unpublished changes" }
+            : { kind: "saving" }
+          : { kind: "saved", text: status === "ACTIVE" ? "Published" : "Saved" };
 
-        {status === "ACTIVE" && localErrors.length > 0 && (
-          <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
-            This flow is live. Fix the errors below to save, or pause it to keep a draft.
-          </p>
-        )}
-        <IssueList errors={issues.general} warnings={issues.generalWarnings} />
+  const errorCount = issues.errors.length;
+  const primary =
+    status === "ACTIVE"
+      ? {
+          label: "Publish",
+          busyLabel: "Publishing…",
+          busy: busy === "publish",
+          disabled: !doc.dirty || doc.saveState === "saving",
+          onClick: () => void goLive("publish"),
+        }
+      : {
+          label: "Set Live",
+          busyLabel: "Going live…",
+          busy: busy === "live",
+          disabled: doc.saveState === "saving",
+          onClick: () => void goLive("live"),
+        };
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="min-w-0 space-y-4">
-            <TriggersPanel
-              triggers={triggers}
-              onChange={setTriggers}
-              username={username}
-              campaigns={meta.automations}
-              flowId={flowId}
-              issuesByTrigger={issues.byTrigger}
-              generalTriggerErrors={[]}
-            />
+  let panelContent: React.ReactNode = null;
+  if (panel?.kind === "node" && selectedNode) {
+    const nodeIssues = issues.byNode.get(selectedNode.id);
+    panelContent = (
+      <StepInspector
+        key={selectedNode.id}
+        node={selectedNode}
+        isStart={graph.startNodeId === selectedNode.id}
+        privateReply={commentTriggered && graph.startNodeId === selectedNode.id}
+        errors={nodeIssues?.errors ?? []}
+        warnings={nodeIssues?.warnings ?? []}
+        counts={doc.stats?.nodes[selectedNode.id]}
+        onChange={(next) => updateGraph((g) => replaceNode(g, selectedNode.id, next), `node:${selectedNode.id}`)}
+        onClose={() => setPanel(null)}
+        onDuplicate={() => duplicateStep(selectedNode.id)}
+        onDelete={() => deleteNodes([selectedNode.id])}
+        onSetStart={() => updateGraph((g) => ({ ...g, startNodeId: selectedNode.id }), null)}
+        onAddAfter={(preset) => addAfter(selectedNode.id, preset)}
+      />
+    );
+  } else if (panel?.kind === "trigger" && meta) {
+    panelContent = (
+      <TriggerInspector
+        triggers={triggers}
+        username={username}
+        instagramAccountId={meta.instagramAccountId}
+        startLabel={startNode ? stepTitle(startNode) : null}
+        issuesByTrigger={issues.byTrigger}
+        expandedId={expandedTrigger}
+        addMenuOpen={triggerMenuOpen}
+        onAddMenuOpenChange={setTriggerMenuOpen}
+        onExpand={setExpandedTrigger}
+        onChange={updateTriggers}
+        automationIdOf={doc.automationIdOf}
+        onClose={() => setPanel(null)}
+      />
+    );
+  } else if (panel?.kind === "issues") {
+    panelContent = (
+      <IssuesPanel
+        groups={issues.groups}
+        live={status === "ACTIVE"}
+        dirty={doc.dirty}
+        busy={busy !== null}
+        onOpen={openIssue}
+        onGoLive={() => void goLive(status === "ACTIVE" ? "publish" : "live")}
+        onClose={() => setPanel(null)}
+      />
+    );
+  }
+  const panelLabel = panel?.kind === "trigger" ? "Triggers" : panel?.kind === "issues" ? "Problems" : "Edit step";
 
-            <div className="flex items-center justify-between gap-3 pt-2">
-              <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                Steps <span className="font-normal text-muted">({graph.nodes.length})</span>
-              </h2>
-              {graph.nodes.length > 1 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    setCollapsed((current) =>
-                      current.size >= graph.nodes.length ? new Set() : new Set(graph.nodes.map((n) => n.id))
-                    )
-                  }
-                >
-                  {collapsed.size >= graph.nodes.length ? "Expand all" : "Collapse all"}
-                </Button>
-              )}
-            </div>
-
-            {graph.nodes.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-border p-8 text-center">
-                <p className="text-sm text-muted">No steps yet. Start with a message.</p>
-              </div>
-            )}
-
-            <ol className="space-y-3">
-              {graph.nodes.map((node, index) => {
-                const nodeIssues = issues.byNode.get(node.id);
-                return (
-                  <li key={node.id}>
-                    <NodeCard
-                      node={node}
-                      index={index}
-                      count={graph.nodes.length}
-                      isStart={graph.startNodeId === node.id}
-                      selected={selectedId === node.id}
-                      collapsed={collapsed.has(node.id)}
-                      errors={nodeIssues?.errors ?? []}
-                      warnings={nodeIssues?.warnings ?? []}
-                      onChange={(next) => updateNode(node.id, next)}
-                      onSelect={() => setSelectedId(node.id)}
-                      onToggleCollapsed={() => toggleCollapsed(node.id)}
-                      onSetStart={() => setGraph((g) => ({ ...g, startNodeId: node.id }))}
-                      onDuplicate={() => duplicateStep(node.id)}
-                      onMove={(direction) => setGraph((g) => moveNode(g, node.id, direction))}
-                      onDelete={() => deleteStep(node.id)}
-                    />
-                  </li>
-                );
-              })}
-            </ol>
-
-            <section aria-label="Add a step" className="rounded-2xl border border-dashed border-border p-3">
-              <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-faint">Add a step</p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {NODE_TYPE_ORDER.map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => addStepAtEnd(type)}
-                    className={`flex min-h-11 items-start gap-2 rounded-xl border border-border bg-surface p-2.5 text-left hover:border-border-hover hover:bg-surface-hover ${PRESS}`}
-                  >
-                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${NODE_TINTS[type]}`}>
-                      <NodeTypeIcon type={type} className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-xs font-medium text-foreground">{NODE_TYPE_LABELS[type]}</span>
-                      <span className="block text-[11px] leading-snug text-muted">{NODE_TYPE_HINTS[type]}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          <aside className="min-w-0 space-y-4 lg:sticky lg:top-24 lg:max-h-[calc(100dvh-8rem)] lg:self-start lg:overflow-y-auto lg:pb-4">
-            <div className="flex items-center justify-between gap-2">
-              <Segmented
-                ariaLabel="Side panel"
-                options={[
-                  { value: "preview", label: "Preview" },
-                  { value: "map", label: "Map" },
-                ]}
-                value={sideTab}
-                onChange={setSideTab}
-              />
-              {sideTab === "preview" && previewNode && (
-                <span className="min-w-0 truncate text-xs text-muted">
-                  {graph.nodes.indexOf(previewNode) + 1}. {previewNode.name || NODE_TYPE_LABELS[previewNode.type]}
-                </span>
-              )}
-            </div>
-            {sideTab === "preview" ? (
-              <FlowPreview node={previewNode} username={username} mediaById={mediaById} />
-            ) : (
-              <div className="rounded-2xl border border-border bg-surface p-3">
-                <FlowMap graph={graph} selectedId={selectedId} errorIds={errorNodeIds} onSelect={revealNode} />
-                <p className="mt-2 text-[11px] text-faint">Solid lines continue at once, dashed lines wait for the person.</p>
-              </div>
-            )}
-
-            <section className="rounded-2xl border border-border bg-surface p-4">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold tracking-tight text-foreground">Runs</h3>
-                <Segmented
-                  ariaLabel="Stats period"
-                  options={[
-                    { value: "7", label: "7d" },
-                    { value: "30", label: "30d" },
-                    { value: "all", label: "All" },
-                  ]}
-                  value={statsDays}
-                  onChange={setStatsDays}
-                />
-              </div>
-              <dl className="mt-3 grid grid-cols-3 gap-3">
-                {[
-                  { label: "Started", value: runs?.total ?? 0 },
-                  { label: "In progress", value: (runs?.RUNNING ?? 0) + (runs?.WAITING ?? 0) },
-                  { label: "Completed", value: runs?.COMPLETED ?? 0 },
-                  { label: "Expired", value: runs?.EXPIRED ?? 0 },
-                  { label: "Failed", value: runs?.FAILED ?? 0 },
-                  { label: "Clicks", value: stats?.totals.CLICKED ?? 0 },
-                ].map((item) => (
-                  <div key={item.label}>
-                    <dt className="text-[11px] text-muted">{item.label}</dt>
-                    <dd className="text-lg font-semibold tabular-nums tracking-tight text-foreground">{item.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-
-            <VariablesPanel fieldNames={fieldNames} />
-          </aside>
+  let body: React.ReactNode;
+  if (doc.loading || !frame) {
+    body = (
+      <div className="absolute inset-0 grid place-items-center">
+        <div className="flex items-center gap-2 text-sm text-muted">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-accent motion-reduce:animate-none" aria-hidden="true" />
+          Loading flow…
         </div>
       </div>
-
-      {notice && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4 lg:bottom-6">
-          <div
-            role="status"
-            className={`pointer-events-auto flex max-w-lg items-center gap-3 rounded-full border px-4 py-2 text-sm shadow-lg transition-[opacity,translate] duration-200 starting:translate-y-2 starting:opacity-0 ${
-              notice.tone === "error"
-                ? "border-error/30 bg-surface text-error"
-                : notice.tone === "success"
-                  ? "border-success/30 bg-surface text-success"
-                  : "border-border bg-surface text-foreground"
-            }`}
-          >
-            <span className="min-w-0">{notice.text}</span>
-            {notice.undo && (
-              <button
-                type="button"
-                onClick={() => {
-                  notice.undo?.();
-                  showNotice(null);
-                }}
-                className={`shrink-0 rounded-full px-2 py-0.5 text-sm font-medium text-accent hover:bg-accent/10 ${PRESS}`}
-              >
-                Undo
-              </button>
-            )}
-            <button
-              type="button"
-              aria-label="Dismiss"
-              onClick={() => showNotice(null)}
-              className="-mr-1 shrink-0 rounded-full p-1 text-muted hover:text-foreground"
-            >
-              <Icon.close className="h-3.5 w-3.5" />
-            </button>
-          </div>
+    );
+  } else if (doc.loadError || !meta) {
+    body = (
+      <div className="absolute inset-0 grid place-items-center p-6">
+        <div className="panel max-w-sm rounded-2xl p-8 text-center">
+          <p className="text-sm text-muted">{doc.loadError ?? "Flow not found."}</p>
+          <Link href="/flows" className={`mt-4 inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm text-muted hover:text-foreground sm:min-h-9 ${PRESS}`}>
+            Back to flows
+          </Link>
         </div>
-      )}
-    </FlowEditorContext.Provider>
+      </div>
+    );
+  } else if (doc.shapeErrors.length > 0) {
+    body = (
+      <div className="absolute inset-0 overflow-y-auto p-6">
+        <div className="mx-auto max-w-xl space-y-4 rounded-2xl border border-error/30 bg-error/5 p-5">
+          <h1 className="text-base font-semibold tracking-tight text-foreground">This flow&apos;s data could not be read</h1>
+          <p className="text-sm text-muted">The editor stays read-only so nothing gets overwritten.</p>
+          <IssueList errors={doc.shapeErrors} />
+          <Link href="/flows" className="text-sm text-accent hover:underline">
+            Back to flows
+          </Link>
+        </div>
+      </div>
+    );
+  } else {
+    body = (
+      <FlowEditorContext.Provider value={editorContext}>
+        <FlowCanvas
+          graph={graph}
+          selectedId={selectedId}
+          errorCounts={issues.errorCounts}
+          warningCounts={issues.warningCounts}
+          context={canvasContext}
+          insets={insets}
+          chromeHidden={phone && panelOpen}
+          onSelect={select}
+          onGraphChange={updateGraph}
+          onDeleteNodes={deleteNodes}
+          onAddStep={addStep}
+        />
+
+        {!panelOpen && graph.nodes.length > 0 && (
+          <div className="pointer-events-none absolute inset-x-0 z-10 flex justify-center px-4" style={{ top: top + 4 }}>
+            <span className="rounded-full border border-border bg-surface/80 px-3 py-1 text-[11px] font-medium text-muted shadow-sm backdrop-blur-xl">
+              Click a card to edit the step in the sidebar
+            </span>
+          </div>
+        )}
+
+        <EditorTopBar
+          name={draft.name}
+          onRename={(name) => commit((d) => ({ ...d, name }), "name")}
+          status={status}
+          save={saveIndicator}
+          onRetry={() => void doc.save("auto")}
+          canUndo={doc.canUndo}
+          canRedo={doc.canRedo}
+          onUndo={doc.undo}
+          onRedo={doc.redo}
+          errorCount={errorCount}
+          onShowIssues={() => setPanel({ kind: "issues" })}
+          previewOpen={previewOpen}
+          onTogglePreview={() => setPreviewOpen((open) => !open)}
+          primary={primary}
+          menuItems={[
+            { label: "Duplicate flow", onSelect: () => void duplicateFlow(), icon: <Icon.copy className="h-4 w-4" /> },
+            ...(status === "ACTIVE"
+              ? [{ label: busy === "pause" ? "Pausing…" : "Pause flow", hint: "Stops new runs and comment replies.", onSelect: () => void pause() }]
+              : []),
+            {
+              label: "Delete flow",
+              tone: "danger" as const,
+              hint: "Asks before deleting.",
+              onSelect: () => void deleteFlow(),
+              icon: <Icon.trash className="h-4 w-4" />,
+            },
+          ]}
+        />
+
+        {phone && !panelOpen && (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-10 pb-[env(safe-area-inset-bottom)]">
+            <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-surface/85 p-1 shadow-lg backdrop-blur-xl">
+              <button type="button" aria-label="Undo" disabled={!doc.canUndo} onClick={doc.undo} className={`grid h-11 w-11 place-items-center rounded-full text-muted disabled:opacity-40 ${PRESS}`}>
+                <UndoGlyph />
+              </button>
+              <button type="button" aria-label="Redo" disabled={!doc.canRedo} onClick={doc.redo} className={`grid h-11 w-11 place-items-center rounded-full text-muted disabled:opacity-40 ${PRESS}`}>
+                <UndoGlyph flip />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {phone ? (
+          <BottomSheet open={panelOpen && panelContent !== null} onClose={() => setPanel(null)} label={panelLabel} onHeightChange={setSheetHeight}>
+            {panelContent}
+          </BottomSheet>
+        ) : (
+          <FloatingPanel open={panelOpen && panelContent !== null} top={top} label={panelLabel}>
+            {panelContent}
+          </FloatingPanel>
+        )}
+
+        <PreviewPanel
+          open={previewOpen}
+          top={top}
+          phone={phone}
+          nodes={graph.nodes}
+          nodeId={previewId ?? graph.startNodeId}
+          username={username}
+          mediaById={mediaById}
+          onPick={setPreviewId}
+          onClose={() => setPreviewOpen(false)}
+        />
+
+        {notice && (
+          <div
+            className="pointer-events-none absolute inset-x-0 z-40 flex justify-center px-4"
+            style={{ bottom: (phone && panelOpen ? sheetHeight : 0) + 80 }}
+          >
+            <div
+              role="status"
+              className={`pointer-events-auto flex max-w-lg items-center gap-3 rounded-full border bg-surface/95 px-4 py-2 text-sm shadow-xl backdrop-blur-xl transition-[opacity,translate] duration-200 starting:translate-y-2 starting:opacity-0 ${
+                notice.tone === "error" ? "border-error/30 text-error" : notice.tone === "success" ? "border-success/30 text-success" : "border-border text-foreground"
+              }`}
+            >
+              <span className="min-w-0">{notice.text}</span>
+              {notice.undo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    doc.undo();
+                    showNotice(null);
+                  }}
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-sm font-medium text-accent hover:bg-accent/10 ${PRESS}`}
+                >
+                  Undo
+                </button>
+              )}
+              <button type="button" aria-label="Dismiss" onClick={() => showNotice(null)} className="-mr-1 shrink-0 rounded-full p-1 text-muted hover:text-foreground">
+                <Icon.close className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </FlowEditorContext.Provider>
+    );
+  }
+
+  return (
+    <>
+      <div ref={anchorRef} aria-hidden="true" className="h-px" />
+      <div
+        className="fixed z-[35] overflow-hidden bg-background"
+        style={frame ? { top: frame.top, left: frame.left, width: frame.width, height: frame.height } : { inset: 0, visibility: "hidden" }}
+      >
+        <ReactFlowProvider>{body}</ReactFlowProvider>
+      </div>
+    </>
   );
 }

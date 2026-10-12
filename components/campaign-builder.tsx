@@ -562,7 +562,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         }
         // refresh() busts the router cache so the list reflects the save
         // instead of landing on a stale (empty) campaigns page.
-        router.push("/campaigns");
+        router.push("/flows");
         router.refresh();
       } else {
         // Surface the specific field that failed validation instead of a
@@ -609,7 +609,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
     } catch {
       // ignore
     }
-    router.push("/campaigns");
+    router.push("/flows");
     router.refresh();
   }
 
@@ -622,10 +622,10 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       <div className="panel rounded p-8 text-center">
         <p className="text-sm text-muted">Campaign not found.</p>
         <button
-          onClick={() => router.push("/campaigns")}
+          onClick={() => router.push("/flows")}
           className="mt-4 min-h-11 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground sm:min-h-0"
         >
-          Back to campaigns
+          Back to flows
         </button>
       </div>
     );

@@ -17,6 +17,8 @@ Scores are 1 to 5; the total is the weighted average.
 
 Picked the step list. A canvas can come later on the same graph JSON; nothing in the data model is tied to the editor.
 
+Superseded the same day by the owner (see "Campaigns merged into Flows" below): the editor is now a canvas on the same graph JSON.
+
 ### 2. "Message people when they follow me"
 
 ManyChat's "Follow to DM" runs on a Meta partner-only beta. The public Instagram webhooks have no follow event (checked Meta's webhook field list and changelog through 2026).
@@ -64,6 +66,8 @@ Meta's CDN links expire, so a stored URL alone stops playing after a while.
 
 Reusing campaigns keeps the post picker, keyword matching, public reply rotation, dedupe, rate limits and the polling reconciler that already work.
 
+Still true after the merge below: a comment trigger is the same Automation row, only edited from the flow.
+
 ### 7. Flows and the AI setter
 
 | Option | Safety | Fit | Compliance | Effort | Maint. | Total |
@@ -85,3 +89,12 @@ Sending prospects' voice notes to a third party needs a privacy decision from th
 - Lead magnet link: a shared document (anyone with the link can view).
 - Captured emails go to the owner's CRM only, with `consent=false` (never to the newsletter).
 - Flow shape: button first (private reply with "Ja, schick her"), then email, then the link.
+
+## 2026-10-12: Campaigns merged into Flows (owner decision)
+
+The owner asked for one "Flows" section with a ManyChat-style canvas ("combine campaign and flows into flows").
+
+- Data: no schema change. A comment trigger is an Automation row with `flowId`; the flow API merges and syncs them, `isActive` follows the flow status, deleting a flow deletes its comment triggers.
+- Live flows do not autosave; edits wait for "Publish". Drafts and paused flows autosave.
+- Classic campaigns (no flow) stay as they are, listed with a Classic badge; no automatic conversion.
+- Canvas: `@xyflow/react` 12 (MIT, React 19 compatible).

@@ -94,9 +94,14 @@ function toRunState(row: {
   };
 }
 
-async function loadFlow(flowId: string): Promise<FlowRow | null> {
-  const flow = await prisma.flow.findUnique({
-    where: { id: flowId },
+/**
+ * A flow of this account only. Validation already refuses links to other
+ * accounts' flows, but runtime never relies on that: a stored flowId from
+ * anywhere (payloads, runs, start_flow steps) can't start a foreign flow.
+ */
+async function loadFlow(flowId: string, account: Pick<FlowAccount, "id" | "workspaceId">): Promise<FlowRow | null> {
+  const flow = await prisma.flow.findFirst({
+    where: { id: flowId, instagramAccountId: account.id, workspaceId: account.workspaceId },
     select: { id: true, name: true, graph: true, status: true },
   });
   if (!flow) return null;
@@ -425,7 +430,7 @@ export async function startFlowForConversation(params: {
   startNodeId?: string | null;
   initialSends?: number;
 }): Promise<RunState | null> {
-  const flow = await loadFlow(params.flowId);
+  const flow = await loadFlow(params.flowId, params.account);
   if (!flow) return null;
   // Drafts and paused flows never start; runs already in flight finish.
   if (flow.status !== "ACTIVE") return null;
@@ -485,7 +490,7 @@ export async function startFlowFromComment(params: {
   });
   if (existingRun) return toRunState(existingRun);
 
-  const flow = await loadFlow(params.flowId);
+  const flow = await loadFlow(params.flowId, params.account);
   if (!flow) throw new Error(`Flow ${params.flowId} not found`);
   if (flow.status !== "ACTIVE") throw new Error(`Flow "${flow.name}" is ${flow.status.toLowerCase()}, not active`);
 
@@ -520,7 +525,7 @@ async function activeRunFor(conversationId: string, flowId?: string) {
 async function tap(account: FlowAccount, conversationId: string, payload: string): Promise<boolean> {
   const decoded = decodeFlowPayload(payload);
   if (!decoded) return false;
-  const flow = await loadFlow(decoded.flowId);
+  const flow = await loadFlow(decoded.flowId, account);
   if (!flow) return true; // our payload, but the flow is gone: swallow it
 
   const result = await withConversationLock(conversationId, async () => {
@@ -684,7 +689,7 @@ export async function handleInboundForFlows(params: {
 
   const active = await activeRunFor(conversationId);
   if (active) {
-    const flow = await loadFlow(active.flowId);
+    const flow = await loadFlow(active.flowId, account);
     const kind = active.waiting?.kind;
     const owns =
       kind === "input" ||
@@ -754,7 +759,7 @@ export async function resumeFlowRun(runId: string, nodeId: string): Promise<void
   const row = await accountForRun(runId);
   if (!row) return;
   const account = row.conversation.instagramAccount;
-  const flow = await loadFlow(row.flowId);
+  const flow = await loadFlow(row.flowId, account);
   if (!flow) return;
   const conversationId = row.conversation.id;
 

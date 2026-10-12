@@ -3,20 +3,16 @@
  * /api/media as the editor and list page read them.
  */
 
-import type { FlowTrigger } from "@/lib/flows/types";
+import type { CommentTrigger, EditorTrigger } from "@/lib/flows/types";
 import type { FlowIssue, MediaAssetKind } from "@/lib/flows/validate";
 
 export type FlowStatusValue = "DRAFT" | "ACTIVE" | "PAUSED";
 
+/** A comment trigger's Automation row (stats live at /campaigns/:id). */
 export interface FlowCampaignRef {
   id: string;
   name: string;
   isActive: boolean;
-  postUrl?: string | null;
-  matchAnyPost?: boolean;
-  pendingNextReel?: boolean;
-  matchAnyWord?: boolean;
-  keywords?: string[];
 }
 
 export interface FlowListItem {
@@ -25,12 +21,29 @@ export interface FlowListItem {
   status: FlowStatusValue;
   instagramAccountId: string;
   instagramAccount: { id: string; username: string };
-  triggers: FlowTrigger[];
+  /** Comment triggers first, then Flow.triggers. */
+  triggers: EditorTrigger[];
   nodeCount: number;
   firstText: string | null;
   automations: FlowCampaignRef[];
   activeRuns: number;
+  totalRuns: number;
+  /** Private replies sent by its comment triggers. */
+  sends: number;
   createdAt: string;
+  updatedAt: string;
+}
+
+/** A comment campaign without a flow (the classic DM pipeline). */
+export interface ClassicCampaignItem {
+  id: string;
+  name: string;
+  isActive: boolean;
+  instagramAccountId: string;
+  instagramAccount: { id: string; username: string };
+  trigger: CommentTrigger;
+  dmMessage: string;
+  sends: number;
   updatedAt: string;
 }
 
@@ -49,8 +62,11 @@ export interface FlowDetail {
   instagramAccount: { id: string; username: string; name: string | null };
   /** Raw stored JSON; the editor shape-parses it before use. */
   graph: unknown;
+  /** Comment triggers (from Automation rows) merged with Flow.triggers. */
   triggers: unknown;
   automations: FlowCampaignRef[];
+  /** automationId -> row version, sent back on save. */
+  triggerVersions: Record<string, string>;
   activeRuns: number;
   createdAt: string;
   updatedAt: string;

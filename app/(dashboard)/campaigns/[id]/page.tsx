@@ -3,9 +3,10 @@
 /**
  * Campaign Detail
  *
- * Clicking a campaign opens this read-only view: a summary of the automation
- * on the left, and Insights / Preview tabs on the right. Edit and Stop/Resume
- * live in the top bar.
+ * Read-only stats view of a comment automation: a classic campaign, or a
+ * flow's comment trigger (the flow editor links here). A summary on the
+ * left, Insights / Preview tabs on the right. Classic campaigns edit and
+ * stop here; a flow's trigger is edited, and goes live, with its flow.
  */
 
 import { useEffect, useState } from "react";
@@ -150,10 +151,10 @@ export default function CampaignDetailPage() {
       <div className="panel rounded p-8 text-center">
         <p className="text-sm text-muted">Campaign not found.</p>
         <button
-          onClick={() => router.push("/campaigns")}
+          onClick={() => router.push("/flows")}
           className="mt-4 min-h-11 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground sm:min-h-0"
         >
-          Back to campaigns
+          Back to flows
         </button>
       </div>
     );
@@ -190,10 +191,10 @@ export default function CampaignDetailPage() {
       <div className="min-w-0 space-y-6">
         <div className="flex items-center gap-2">
           <Link
-            href="/campaigns"
+            href={campaign.flow ? `/flows/${campaign.flow.id}` : "/flows"}
             className="inline-flex min-h-11 items-center text-sm text-muted hover:text-foreground sm:min-h-0"
           >
-            &larr; Campaigns
+            &larr; {campaign.flow ? campaign.flow.name : "Flows"}
           </Link>
         </div>
         <div className="flex items-center gap-2">
@@ -266,7 +267,7 @@ export default function CampaignDetailPage() {
             </Link>
             {campaign.flow.status !== "ACTIVE" && (
               <p className="text-xs text-warning">
-                Activate the flow so this campaign can run it.
+                Set the flow live so this trigger answers comments.
               </p>
             )}
           </Summary>
@@ -317,6 +318,14 @@ export default function CampaignDetailPage() {
               Preview
             </TabButton>
           </div>
+          {campaign.flow ? (
+            <Link
+              href={`/flows/${campaign.flow.id}?trigger=${encodeURIComponent(campaign.id)}`}
+              className="inline-flex min-h-11 items-center rounded border border-border px-4 py-1.5 text-sm text-muted hover:text-foreground sm:min-h-0 sm:px-3"
+            >
+              Edit in flow
+            </Link>
+          ) : (
           <div className="flex items-center gap-2">
             <Link
               href={`/campaigns/${campaign.id}/edit`}
@@ -336,6 +345,7 @@ export default function CampaignDetailPage() {
               {campaign.isActive ? "Stop" : "Resume"}
             </button>
           </div>
+          )}
         </div>
 
         {tab === "insights" && (

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isInstagramPostUrl } from "@/lib/flows/comment-triggers";
 import { z } from "zod";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
@@ -15,13 +16,23 @@ import {
 // immediately), so never cache it at the route or CDN layer.
 export const dynamic = "force-dynamic";
 
+/** Link destinations open in prospects' browsers: http(s) only, never javascript:, data: or file:. */
+/** A post link is shown as a link in the editor: Instagram post/reel URLs only. */
+const instagramPostUrl = z.string().max(500).refine(isInstagramPostUrl, "Use an Instagram post or reel link");
+
+const webUrl = z
+  .string()
+  .url()
+  .max(2048)
+  .refine((value) => /^https?:\/\//i.test(value), "Use an http(s) link");
+
 const createAutomationSchema = z
   .object({
     name: z.string().min(1).max(100),
     goal: z.string().min(1).max(120).optional().nullable(),
     instagramAccountId: z.string().min(1).optional().nullable(),
     postId: z.string().min(1).optional().nullable(),
-    postUrl: z.string().url().optional().nullable(),
+    postUrl: instagramPostUrl.optional().nullable(),
     pendingNextReel: z.boolean().optional().default(false),
     matchAnyPost: z.boolean().optional().default(false),
     keywords: z.array(z.string().min(1).max(50)).max(10).optional().default([]),
@@ -49,12 +60,12 @@ const createAutomationSchema = z
       .default([]),
     // Empty string means "no tracked link"; a URL sets one.
     trackedDestinationUrl: z
-      .union([z.string().url(), z.literal("")])
+      .union([webUrl, z.literal("")])
       .optional()
       .nullable(),
     // Optional second tracked link, rendered as a second DM button.
     secondaryDestinationUrl: z
-      .union([z.string().url(), z.literal("")])
+      .union([webUrl, z.literal("")])
       .optional()
       .nullable(),
     secondaryButtonLabel: z.string().max(20).optional().nullable(),
@@ -89,7 +100,7 @@ const updateAutomationSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   goal: z.string().min(1).max(120).optional().nullable(),
   postId: z.string().min(1).optional().nullable(),
-  postUrl: z.string().url().optional().nullable(),
+  postUrl: instagramPostUrl.optional().nullable(),
   pendingNextReel: z.boolean().optional(),
   matchAnyPost: z.boolean().optional(),
   keywords: z.array(z.string().min(1).max(50)).max(10).optional(),
@@ -117,12 +128,12 @@ const updateAutomationSchema = z.object({
   // Empty string clears the tracked link; a URL updates/creates it; undefined
   // leaves it unchanged.
   trackedDestinationUrl: z
-    .union([z.string().url(), z.literal("")])
+    .union([webUrl, z.literal("")])
     .optional()
     .nullable(),
   // Same semantics for the optional second tracked link / DM button.
   secondaryDestinationUrl: z
-    .union([z.string().url(), z.literal("")])
+    .union([webUrl, z.literal("")])
     .optional()
     .nullable(),
   secondaryButtonLabel: z.string().max(20).optional().nullable(),
@@ -136,9 +147,16 @@ async function findCampaignFlow(
 ) {
   return prisma.flow.findFirst({
     where: { id: flowId, workspaceId, instagramAccountId },
-    select: { id: true },
+    select: { id: true, name: true, status: true },
   });
 }
+
+/**
+ * A campaign that runs a flow is that flow's comment trigger: the flow
+ * editor owns it (PUT /api/flows/:id) and its isActive follows the flow
+ * status. Here only the share-report toggle may still change.
+ */
+const FLOW_BACKED_EDITABLE = new Set(["reportShareEnabled"]);
 
 export async function GET(request: NextRequest) {
   const workspaceId = await getCurrentWorkspaceId();
@@ -364,7 +382,10 @@ export async function POST(request: NextRequest) {
   }
 
   const flowId = parsed.data.flowId ?? null;
-  if (flowId && !(await findCampaignFlow(flowId, workspaceId, instagramAccount.id))) {
+  const linkedFlow = flowId
+    ? await findCampaignFlow(flowId, workspaceId, instagramAccount.id)
+    : null;
+  if (flowId && !linkedFlow) {
     return NextResponse.json(
       { success: false, error: "Choose a flow from the same Instagram account" },
       { status: 400 }
@@ -452,7 +473,8 @@ export async function POST(request: NextRequest) {
       publicReplyMessage: parsed.data.publicReplyEnabled
         ? publicReplyList[0] ?? parsed.data.publicReplyMessage ?? null
         : null,
-      isActive: parsed.data.isActive,
+      // A flow's comment trigger is live exactly when the flow is.
+      isActive: linkedFlow ? linkedFlow.status === "ACTIVE" : parsed.data.isActive,
       wholeWordMatch: parsed.data.wholeWordMatch,
       aiPersonalizeDm: parsed.data.aiPersonalizeDm,
       workspaceId,
@@ -524,6 +546,24 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  if (existing.flowId) {
+    const blocked = Object.keys(parsed.data).filter(
+      (key) =>
+        !FLOW_BACKED_EDITABLE.has(key) &&
+        parsed.data[key as keyof typeof parsed.data] !== undefined
+    );
+    if (blocked.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "This comment trigger belongs to a flow. Edit it in the flow editor.",
+          flowId: existing.flowId,
+        },
+        { status: 409 }
+      );
+    }
+  }
+
   // A campaign without a flow still needs its DM text. Only checked when the
   // request touches either field, so toggles keep working on any campaign.
   if (parsed.data.dmMessage !== undefined || parsed.data.flowId !== undefined) {
@@ -545,10 +585,10 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  if (
-    parsed.data.flowId &&
-    !(await findCampaignFlow(parsed.data.flowId, workspaceId, existing.instagramAccountId))
-  ) {
+  const linkedFlow = parsed.data.flowId
+    ? await findCampaignFlow(parsed.data.flowId, workspaceId, existing.instagramAccountId)
+    : null;
+  if (parsed.data.flowId && !linkedFlow) {
     return NextResponse.json(
       { success: false, error: "Choose a flow from the same Instagram account" },
       { status: 400 }
@@ -593,6 +633,9 @@ export async function PATCH(request: NextRequest) {
     automationData.publicReplyMessages = [];
     automationData.publicReplyMessage = null;
   }
+  // Linking a classic campaign to a flow makes it that flow's comment
+  // trigger, live exactly when the flow is.
+  if (linkedFlow) automationData.isActive = linkedFlow.status === "ACTIVE";
 
   const updated = await prisma.automation.update({
     where: { id: automationId },
@@ -699,6 +742,19 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(
       { success: false, error: "Campaign not found" },
       { status: 404 }
+    );
+  }
+
+  if (existing.flowId) {
+    // A flow's comment trigger is removed in the flow editor, like every
+    // other change to it (PATCH answers the same way).
+    return NextResponse.json(
+      {
+        success: false,
+        error: "This comment trigger belongs to a flow. Remove it in the flow editor.",
+        flowId: existing.flowId,
+      },
+      { status: 409 }
     );
   }
 

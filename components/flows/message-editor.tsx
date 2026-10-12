@@ -36,7 +36,18 @@ function hasRoutingTaps(node: MessageNode): boolean {
   });
 }
 
-export function MessageEditor({ node, onChange }: { node: MessageNode; onChange: (node: MessageNode) => void }) {
+export const MESSAGE_BLOCK_TYPES = BLOCK_TYPES;
+
+export function MessageEditor({
+  node,
+  onChange,
+  palette,
+}: {
+  node: MessageNode;
+  onChange: (node: MessageNode) => void;
+  /** Replaces the "Add block" menu (the canvas sidebar shows a block palette). */
+  palette?: (add: (type: FlowContent["type"]) => void, full: boolean) => React.ReactNode;
+}) {
   const contents = node.contents;
   const setContents = (next: FlowContent[]) => onChange({ ...node, contents: next });
   const updateBlock = (index: number, block: FlowContent) => setContents(contents.map((c, i) => (i === index ? block : c)));
@@ -71,7 +82,7 @@ export function MessageEditor({ node, onChange }: { node: MessageNode; onChange:
         ))}
       </ol>
 
-      {contents.length < FLOW_EDITOR_LIMITS.contentsPerMessageMax && (
+      {!palette && contents.length < FLOW_EDITOR_LIMITS.contentsPerMessageMax && (
         <Menu
           width="w-64"
           items={BLOCK_TYPES.map((b) => ({
@@ -95,9 +106,14 @@ export function MessageEditor({ node, onChange }: { node: MessageNode; onChange:
 
       <QuickReplies node={node} onChange={onChange} />
 
+      {palette?.(
+        (type) => setContents([...contents, createContent(type)]),
+        contents.length >= FLOW_EDITOR_LIMITS.contentsPerMessageMax
+      )}
+
       <div className="space-y-1.5 border-t border-border pt-4">
         <StepSelect
-          label="After sending"
+          label="Choose Next Step"
           endLabel={waits ? "Wait for a tap" : "End flow"}
           value={node.next}
           ownerId={node.id}

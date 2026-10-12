@@ -5,7 +5,14 @@
 import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
-import type { FlowGraph, FlowTrigger } from "@/lib/flows/types";
+import {
+  COMMENT_AUTOMATION_SELECT,
+  commentOverlapWarnings,
+  commentTriggerFromRow,
+  validateCommentTriggers,
+  type CommentAutomationRow,
+} from "@/lib/flows/comment-triggers";
+import type { CommentTrigger, EditorTrigger, FlowGraph, FlowTrigger } from "@/lib/flows/types";
 import {
   lintFlow,
   nodeDisplayName,
@@ -219,6 +226,8 @@ export interface FlowValidation {
 /**
  * Validate a stored or submitted flow. Shape problems become errors on the
  * flow itself so a malformed row still loads instead of crashing.
+ * `commentTriggers` are the flow's comment triggers (Automation rows or
+ * the submitted list); they add their own rules and overlap warnings.
  */
 export async function buildValidation(params: {
   workspaceId: string;
@@ -226,7 +235,7 @@ export async function buildValidation(params: {
   instagramAccountId: string;
   graph: unknown;
   triggers: unknown;
-  commentTriggered: boolean;
+  commentTriggers: CommentTrigger[];
 }): Promise<FlowValidation> {
   const graph = parseFlowGraphShape(params.graph);
   const triggers = parseFlowTriggersShape(params.triggers);
@@ -238,32 +247,68 @@ export async function buildValidation(params: {
     return { errors: shapeErrors, warnings: [], serverErrors: shapeErrors, serverWarnings: [] };
   }
 
-  const server = await crossCheckFlow({
-    workspaceId: params.workspaceId,
-    flowId: params.flowId,
-    instagramAccountId: params.instagramAccountId,
-    graph: graph.value,
-    triggers: triggers.value,
-  });
+  const [server, liveComments] = await Promise.all([
+    crossCheckFlow({
+      workspaceId: params.workspaceId,
+      flowId: params.flowId,
+      instagramAccountId: params.instagramAccountId,
+      graph: graph.value,
+      triggers: triggers.value,
+    }),
+    params.commentTriggers.length > 0
+      ? prisma.automation.findMany({
+          where: {
+            workspaceId: params.workspaceId,
+            instagramAccountId: params.instagramAccountId,
+            isActive: true,
+            ...(params.flowId ? { OR: [{ flowId: null }, { flowId: { not: params.flowId } }] } : {}),
+          },
+          select: {
+            id: true,
+            name: true,
+            postId: true,
+            matchAnyPost: true,
+            keywords: true,
+            matchAnyWord: true,
+            flow: { select: { name: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+  const overlap = commentOverlapWarnings(params.commentTriggers, liveComments);
+  const commentTriggered = params.commentTriggers.length > 0;
 
   return {
-    errors: [...validateFlowGraph(graph.value), ...validateFlowTriggers(triggers.value), ...server.errors],
-    warnings: [...lintFlow(graph.value, { commentTriggered: params.commentTriggered }), ...server.warnings],
+    errors: [
+      ...validateFlowGraph(graph.value),
+      ...validateCommentTriggers(params.commentTriggers),
+      ...validateFlowTriggers(triggers.value),
+      ...server.errors,
+    ],
+    warnings: [...lintFlow(graph.value, { commentTriggered }), ...server.warnings, ...overlap],
     serverErrors: server.errors,
-    serverWarnings: server.warnings,
+    serverWarnings: [...server.warnings, ...overlap],
   };
 }
 
-export const FLOW_AUTOMATION_SELECT = {
-  id: true,
-  name: true,
-  isActive: true,
-  postUrl: true,
-  matchAnyPost: true,
-  pendingNextReel: true,
-  matchAnyWord: true,
-  keywords: true,
-} as const;
+/** Linked Automation rows (comment triggers), with everything the editor needs. */
+export const FLOW_AUTOMATION_SELECT = COMMENT_AUTOMATION_SELECT;
+
+/**
+ * The flow's trigger list as the editor sees it: comment triggers (from
+ * the Automation rows) first, then Flow.triggers. A malformed
+ * Flow.triggers is passed through untouched so the editor can show it.
+ */
+export function mergedTriggers(storedTriggers: unknown, rows: CommentAutomationRow[]): unknown {
+  const comments: EditorTrigger[] = rows.map(commentTriggerFromRow);
+  if (!Array.isArray(storedTriggers)) return comments.length > 0 ? comments : storedTriggers;
+  return [...comments, ...(storedTriggers as FlowTrigger[])];
+}
+
+/** Automation refs for stats links (the per-campaign stats view). */
+export function automationRefs(rows: CommentAutomationRow[]) {
+  return rows.map((row) => ({ id: row.id, name: row.name, isActive: row.isActive }));
+}
 
 /** Runs that are still in progress (executing or parked). */
 export const OPEN_RUN_STATUSES = ["RUNNING", "WAITING"] as const;
