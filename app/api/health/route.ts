@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
+import { isLocalRequest } from "@/lib/client-ip";
 import { prisma } from "@/lib/db/client";
 import { getDMQueue, getRedisConnection } from "@/lib/queue/client";
 import { getWorkerHealth } from "@/lib/ops/worker-health";
@@ -59,9 +60,10 @@ async function checkQueue(): Promise<HealthCheck & { counts?: unknown }> {
 
 /**
  * Details (process id, host name, queue counts, error text) only for the
- * server itself or a caller holding HEALTH_TOKEN. Requests that came in
- * through Cloudflare or another proxy carry forwarding headers and get
- * just the status, so the public URL reveals nothing about the machine.
+ * server itself or a caller holding HEALTH_TOKEN. Requests through
+ * Cloudflare carry cf-connecting-ip and the public host, so the public URL
+ * only says ok or degraded. (Next.js adds x-forwarded-* to every direct
+ * connection, so those headers can't tell local from remote.)
  */
 function mayShowDetails(request: Request): boolean {
   const token = process.env.HEALTH_TOKEN;
@@ -69,12 +71,7 @@ function mayShowDetails(request: Request): boolean {
   if (token && given && token.length === given.length) {
     if (timingSafeEqual(Buffer.from(token), Buffer.from(given))) return true;
   }
-  const forwarded = ["cf-connecting-ip", "x-forwarded-for", "x-real-ip", "forwarded"].some((name) =>
-    request.headers.has(name)
-  );
-  if (forwarded) return false;
-  const host = new URL(request.url).hostname;
-  return host === "127.0.0.1" || host === "localhost" || host === "::1";
+  return isLocalRequest(request);
 }
 
 export async function GET(request: Request) {

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isLocalRequest } from "@/lib/client-ip";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/automations", "/logs", "/settings"];
 
@@ -28,13 +29,16 @@ function reject(status: number, error: string) {
 }
 
 /**
- * The visitor reached us over plain http (Cloudflare reports the scheme it
- * received). Local requests (health checks on 127.0.0.1) carry no such
- * header and are left alone.
+ * The visitor reached us over plain http. Cloudflare says so in cf-visitor.
+ * Next.js itself stamps x-forwarded-proto "http" on every direct
+ * connection, so that header only counts for requests addressed to the
+ * public host, never for local ones (health checks, the cron job).
  */
 function cameInOverHttp(request: NextRequest): boolean {
-  if (request.headers.get("x-forwarded-proto")?.split(",")[0].trim() === "http") return true;
-  return /"scheme"\s*:\s*"http"/.test(request.headers.get("cf-visitor") ?? "");
+  const visitor = request.headers.get("cf-visitor");
+  if (visitor) return /"scheme"\s*:\s*"http"/.test(visitor);
+  if (isLocalRequest(request)) return false;
+  return request.headers.get("x-forwarded-proto")?.split(",")[0].trim() === "http";
 }
 
 /** Hosts this app answers on, for the same-origin check. */

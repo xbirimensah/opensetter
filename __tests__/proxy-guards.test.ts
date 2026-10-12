@@ -52,6 +52,20 @@ describe("https redirect", () => {
     expect(res.headers.get("location")).toBe("https://opensetter.example.com/login?x=1");
   });
 
+  it("never redirects local calls, even with the x-forwarded-proto Next.js adds", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const local = new NextRequest("http://127.0.0.1:8310/api/cron/refresh-tokens", {
+      headers: { host: "127.0.0.1:8310", "x-forwarded-proto": "http", "x-forwarded-for": "127.0.0.1" },
+    });
+    expect(proxy(local).headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("redirects Cloudflare visitors who came in over http", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const res = proxy(request("/login", { headers: { "cf-visitor": '{"scheme":"http"}', "cf-connecting-ip": "203.0.113.9" } }));
+    expect(res.status).toBe(308);
+  });
+
   it("leaves local requests alone", () => {
     vi.stubEnv("NODE_ENV", "production");
     expect(proxy(request("/api/health")).headers.get("x-middleware-next")).toBe("1");
