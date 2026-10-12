@@ -3,16 +3,27 @@
 /**
  * Theme toggle: dark (default) or light, persisted in localStorage and
  * applied via data-theme on <html>. The inline script in the root
- * layout applies the stored value before first paint.
+ * layout applies the stored value before first paint. The switch itself
+ * cross-fades (View Transitions) so the brightness change is eased, not
+ * a flash; with reduced motion it is instant.
  */
 
 import { useEffect, useState } from "react";
+import { MoonIcon, SunIcon } from "@/components/nav-icons";
 
 type Theme = "dark" | "light";
 
 function readTheme(): Theme {
   if (typeof document === "undefined") return "dark";
   return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
+
+function applyTheme(next: Theme) {
+  if (next === "light") {
+    document.documentElement.dataset.theme = "light";
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
 }
 
 export default function ThemeToggle() {
@@ -29,10 +40,11 @@ export default function ThemeToggle() {
 
   function toggle() {
     const next: Theme = readTheme() === "light" ? "dark" : "light";
-    if (next === "light") {
-      document.documentElement.dataset.theme = "light";
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduceMotion && typeof document.startViewTransition === "function") {
+      document.startViewTransition(() => applyTheme(next));
     } else {
-      delete document.documentElement.dataset.theme;
+      applyTheme(next);
     }
     try {
       localStorage.setItem("theme", next);
@@ -42,17 +54,18 @@ export default function ThemeToggle() {
     setTheme(next);
   }
 
+  const label = theme === "light" ? "Switch to dark mode" : "Switch to light mode";
+
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-label={
-        theme === "light" ? "Switch to dark mode" : "Switch to light mode"
-      }
-      title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded border border-border px-2 py-1 text-sm text-muted hover:border-border-hover hover:text-foreground lg:min-h-0 lg:min-w-0"
+      aria-label={label}
+      title={label}
+      className="press inline-flex h-11 w-11 items-center justify-center rounded-full text-muted hover:bg-fill hover:text-foreground lg:h-9 lg:w-9"
     >
-      {theme === null ? "…" : theme === "light" ? "Dark" : "Light"}
+      {/* Shows the mode you switch to, like the label says. */}
+      {theme === "light" ? <MoonIcon size={19} /> : <SunIcon size={19} />}
     </button>
   );
 }

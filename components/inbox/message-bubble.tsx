@@ -98,7 +98,7 @@ export default function MessageRow({
         <MessageBody message={message} onOpenImage={onOpenImage} />
         {message.reaction && (
           <span
-            className={`absolute -bottom-3.5 ${fromMe ? "left-2" : "right-2"} rounded-full border border-border bg-surface px-1.5 text-sm leading-6 shadow-sm`}
+            className={`absolute -bottom-3.5 ${fromMe ? "left-2" : "right-2"} rounded-full border border-border bg-surface-raised px-1.5 text-sm leading-6 shadow-sm`}
             role="img"
             aria-label={`Reaction ${message.reaction}`}
           >
@@ -158,7 +158,7 @@ function ReplyQuote({
         type="button"
         onClick={onJump}
         disabled={!repliedTo}
-        className="mt-0.5 max-w-full rounded-2xl border border-border bg-surface-hover px-3 py-1.5 text-left text-xs text-muted transition-colors hover:text-foreground disabled:cursor-default disabled:hover:text-muted"
+        className="mt-0.5 max-w-full rounded-2xl bg-fill px-3 py-1.5 text-left text-footnote text-muted transition-colors hover:text-foreground disabled:cursor-default disabled:hover:text-muted"
       >
         <span className="line-clamp-2 break-words">{snippet}</span>
       </button>
@@ -178,7 +178,7 @@ function TextBubble({
   return (
     <div
       className={`min-w-0 max-w-full rounded-[1.125rem] px-3 py-2 text-sm leading-relaxed ${
-        fromMe ? "bg-accent text-white" : "border border-border bg-surface text-foreground"
+        fromMe ? "bg-accent text-white" : "bg-fill-strong text-foreground"
       }`}
     >
       {children}
@@ -190,7 +190,7 @@ function TextBubble({
 /** Muted, outlined bubble for things the dashboard cannot show. */
 function NoticeBubble({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex max-w-full items-center gap-2 rounded-[1.125rem] border border-dashed border-border px-3 py-2 text-sm text-muted">
+    <div className="flex max-w-full items-center gap-2 rounded-[1.125rem] bg-fill px-3 py-2 text-sm text-muted">
       <span className="shrink-0">{icon}</span>
       <span className="min-w-0">{children}</span>
     </div>

@@ -3,22 +3,27 @@
 /**
  * Top Bar
  *
- * Page title, mobile hamburger, and connection status.
+ * Wayfinding for every app screen: the page title (the page's h1), the
+ * connected Instagram account, and the theme switch. It is translucent
+ * chrome over the scroll container: clear at rest, material plus a soft
+ * scroll-edge fade once content passes under it (see .app-topbar).
  */
 
 import { usePathname } from "next/navigation";
 import ThemeToggle from "@/components/theme-toggle";
+import { SidebarIcon } from "@/components/nav-icons";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/overview": "Overview",
   "/inbox": "Inbox",
   "/ai-setter": "AI Setter",
-  "/campaigns/import": "Import Campaigns",
-  "/campaigns": "Campaigns",
-  "/campaigns/new": "New Campaign",
-  "/automations": "Campaigns",
-  "/automations/new": "New Campaign",
+  "/campaigns/import": "Import Classic Campaigns",
+  "/campaigns": "Flows",
+  "/campaigns/new": "Flows",
+  "/automations": "Flows",
+  "/automations/new": "Flows",
+  "/flows/new": "New Flow",
   "/logs": "DM Logs",
   "/settings": "Settings",
   "/diagnostics": "Diagnostics",
@@ -27,12 +32,16 @@ const pageTitles: Record<string, string> = {
 
 interface TopBarProps {
   onMenuClick: () => void;
+  menuOpen: boolean;
+  scrolled: boolean;
   instagramUsername: string | null;
   instagramAccountCount: number;
 }
 
 export default function TopBar({
   onMenuClick,
+  menuOpen,
+  scrolled,
   instagramUsername,
   instagramAccountCount,
 }: TopBarProps) {
@@ -40,40 +49,51 @@ export default function TopBar({
   const title =
     pageTitles[pathname] ??
     (pathname.startsWith("/campaigns/")
-      ? "Campaign"
+      ? "Comment Stats"
       : pathname.startsWith("/flows/")
         ? "Flow"
         : "Dashboard");
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-background pt-[env(safe-area-inset-top)]">
-      <div className="flex h-14 items-center justify-between gap-3 px-4 lg:h-16 lg:px-8">
-        <div className="flex min-w-0 items-center gap-3 lg:gap-4">
+    <header
+      className="app-topbar pt-[env(safe-area-inset-top)]"
+      data-scrolled={scrolled ? "true" : "false"}
+    >
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 lg:h-16 lg:px-8">
+        <div className="flex min-w-0 items-center gap-1">
           <button
             type="button"
             onClick={onMenuClick}
-            className="lg:hidden inline-flex min-h-11 min-w-11 items-center justify-center rounded border border-border px-2 text-sm text-muted hover:text-foreground"
             aria-label="Open menu"
+            aria-controls="app-sidebar"
+            aria-expanded={menuOpen}
+            className="press -ml-2.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-fill lg:hidden"
           >
-            Menu
+            <SidebarIcon size={22} />
           </button>
-          <h1 className="truncate text-base font-semibold lg:text-lg">{title}</h1>
+          <h1 className="truncate text-[1.0625rem] font-semibold tracking-[-0.012em] text-foreground lg:text-xl lg:font-bold">
+            {title}
+          </h1>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2">
           {instagramAccountCount > 0 ? (
-            <p className="hidden max-w-40 truncate text-sm text-muted sm:block">
-              {instagramAccountCount > 1
-                ? `${instagramAccountCount} accounts`
-                : `@${instagramUsername}`}
+            <p
+              className="hidden max-w-48 items-center gap-2 truncate text-footnote text-muted sm:flex"
+              title="Connected Instagram account"
+            >
+              <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+              <span className="truncate">
+                {instagramAccountCount > 1
+                  ? `${instagramAccountCount} accounts`
+                  : `@${instagramUsername}`}
+              </span>
             </p>
           ) : (
-            <a
-              href="/api/instagram/connect"
-              className="inline-flex min-h-11 items-center rounded bg-accent px-3 text-sm font-medium text-white hover:bg-accent-hover lg:min-h-0 lg:py-1.5"
-            >
-              Connect
-              <span className="hidden sm:inline">&nbsp;Instagram</span>
+            <a href="/api/instagram/connect" className="btn btn-primary btn-sm">
+              <span>
+                Connect<span className="hidden sm:inline"> Instagram</span>
+              </span>
             </a>
           )}
           <ThemeToggle />

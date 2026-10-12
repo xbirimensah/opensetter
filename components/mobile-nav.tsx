@@ -4,49 +4,68 @@
  * Mobile bottom navigation
  *
  * Thumb-reachable tabs for the screens used on the go. Everything else
- * stays one tap away in the drawer behind "More". Hidden from lg up,
- * where the sidebar is always visible.
+ * stays one tap away in the drawer behind "More". Translucent chrome over
+ * the content with a soft fade on its top edge (see .app-tabbar). Hidden
+ * from lg up, where the sidebar is always visible.
  */
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ComponentType } from "react";
+import {
+  AiSetterIcon,
+  DashboardIcon,
+  FlowsIcon,
+  InboxIcon,
+  MoreIcon,
+} from "@/components/nav-icons";
 
-const tabs = [
-  { label: "Inbox", href: "/inbox" },
-  { label: "AI Setter", href: "/ai-setter" },
-  { label: "Campaigns", href: "/campaigns" },
-  { label: "Flows", href: "/flows" },
-  { label: "Dashboard", href: "/dashboard" },
+type TabIcon = ComponentType<{ size?: number; className?: string }>;
+
+const tabs: Array<{ label: string; href: string; icon: TabIcon; alsoActiveOn?: string[] }> = [
+  { label: "Inbox", href: "/inbox", icon: InboxIcon },
+  { label: "AI Setter", href: "/ai-setter", icon: AiSetterIcon },
+  { label: "Flows", href: "/flows", icon: FlowsIcon, alsoActiveOn: ["/campaigns", "/automations"] },
+  { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
 ];
+
+function matches(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(prefix + "/");
+}
 
 interface MobileNavProps {
   onMoreClick: () => void;
+  moreOpen: boolean;
 }
 
-export default function MobileNav({ onMoreClick }: MobileNavProps) {
+const TAB_CLASS =
+  "press flex min-h-[3.25rem] w-full flex-col items-center justify-center gap-0.5 px-1 text-[0.6875rem] leading-tight tracking-[0.01em]";
+
+export default function MobileNav({ onMoreClick, moreOpen }: MobileNavProps) {
   const pathname = usePathname();
 
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
+      className="app-tabbar fixed inset-x-0 bottom-0 z-30 pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       {/* One column per tab plus "More". */}
-      <ul className="grid grid-cols-6">
+      <ul className="mx-auto grid max-w-lg grid-cols-5">
         {tabs.map((tab) => {
-          const isActive =
-            pathname === tab.href || pathname.startsWith(tab.href + "/");
+          const isActive = [tab.href, ...(tab.alsoActiveOn ?? [])].some((prefix) =>
+            matches(pathname, prefix)
+          );
+          const TabGlyph = tab.icon;
           return (
             <li key={tab.href}>
               <Link
                 href={tab.href}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex min-h-14 items-center justify-center px-1 text-center text-xs leading-tight ${
-                  isActive
-                    ? "font-semibold text-accent"
-                    : "text-muted hover:text-foreground"
+                className={`${TAB_CLASS} ${
+                  isActive ? "font-semibold text-accent" : "text-faint active:text-foreground"
                 }`}
               >
+                <TabGlyph size={22} />
                 {tab.label}
               </Link>
             </li>
@@ -56,8 +75,11 @@ export default function MobileNav({ onMoreClick }: MobileNavProps) {
           <button
             type="button"
             onClick={onMoreClick}
-            className="flex min-h-14 w-full items-center justify-center px-1 text-xs text-muted hover:text-foreground"
+            aria-controls="app-sidebar"
+            aria-expanded={moreOpen}
+            className={`${TAB_CLASS} text-faint active:text-foreground`}
           >
+            <MoreIcon size={22} />
             More
           </button>
         </li>

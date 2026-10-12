@@ -107,17 +107,17 @@ function ProviderKeyCard({
   }
 
   return (
-    <li className="rounded-xl border border-border bg-surface p-4">
+    <li className="panel p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">{status.label}</p>
-          <p className="mt-0.5 text-xs text-muted">
+          <p className="mt-0.5 text-footnote text-muted">
             {status.configured
               ? `Key saved · fingerprint ${status.keyFingerprint} · ${formatDateTime(status.updatedAt)}`
               : "No key saved"}
           </p>
           {status.configured && (status.defaultModel || status.baseUrl) && (
-            <p className="mt-0.5 break-all text-xs text-faint">
+            <p className="mt-0.5 break-all text-footnote text-faint">
               {[status.defaultModel, status.baseUrl].filter(Boolean).join(" · ")}
             </p>
           )}
@@ -129,7 +129,7 @@ function ProviderKeyCard({
                 type="button"
                 onClick={() => void remove()}
                 disabled={busy}
-                className="min-h-11 rounded-lg px-3 text-xs text-muted hover:text-error disabled:opacity-50 sm:min-h-0 sm:py-1.5"
+                className="btn btn-quiet btn-sm hover:text-error"
               >
                 Remove
               </button>
@@ -138,7 +138,7 @@ function ProviderKeyCard({
               type="button"
               onClick={() => setOpen((prev) => !prev)}
               aria-expanded={open}
-              className="min-h-11 rounded-lg border border-border px-3 text-xs font-medium text-foreground hover:border-border-hover sm:min-h-0 sm:py-1.5"
+              className="btn btn-secondary btn-sm"
             >
               {open ? "Cancel" : status.configured ? "Replace key" : "Add key"}
             </button>
@@ -194,7 +194,7 @@ function ProviderKeyCard({
             type="button"
             onClick={() => void save()}
             disabled={busy || !apiKey.trim()}
-            className="min-h-11 w-full rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-0 sm:w-auto sm:justify-self-start"
+            className="btn btn-primary w-full sm:w-auto sm:justify-self-start"
           >
             {busy ? "Saving…" : "Save key"}
           </button>
@@ -275,8 +275,8 @@ export default function ModelProviderPanel({
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,4fr)_minmax(0,5fr)]">
       <div className="min-w-0 space-y-4">
-        <section className="rounded-xl border border-border bg-surface p-4" aria-labelledby="model-heading">
-          <h2 id="model-heading" className="text-sm font-semibold text-foreground">
+        <section className="panel p-4 sm:p-5" aria-labelledby="model-heading">
+          <h2 id="model-heading" className="section-title">
             Model for this account
           </h2>
           <label className="mt-3 block">
@@ -322,7 +322,7 @@ export default function ModelProviderPanel({
           </label>
           {selectedCli && (
             <>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-footnote text-muted">
                 <CliReadinessBadge status={selectedCli} />
                 <span className="min-w-0 break-words">
                   {selectedCli.problem ??
@@ -354,25 +354,25 @@ export default function ModelProviderPanel({
                   <option key={model} value={model} />
                 ))}
               </datalist>
-              <span className="mt-1 block text-xs text-muted">
+              <span className="mt-1 block text-footnote text-muted">
                 Empty uses the key&apos;s default model. Applies to replies,
                 follow-up nudges and personalized campaign openers.
               </span>
             </label>
           )}
           {!payload.canManage && (
-            <p className="mt-3 text-xs text-muted">
+            <p className="mt-3 text-footnote text-muted">
               Only workspace owners and admins can change the model.
             </p>
           )}
           {form.llmProvider && !selected && !selectedCli && (
-            <p className="mt-3 text-xs text-warning">
+            <p className="mt-3 text-footnote text-warning">
               The selected provider no longer has a saved key. Pick another
               provider or the server default, then save.
             </p>
           )}
           {!form.llmProvider && !env.hasKey && (
-            <p className="mt-3 text-xs text-warning">
+            <p className="mt-3 text-footnote text-warning">
               The server default has no API key configured. Add a key below
               and select it, or set the provider env vars.
             </p>
@@ -381,21 +381,21 @@ export default function ModelProviderPanel({
         </section>
 
         <section
-          className={`rounded-xl border p-4 text-sm ${
-            encryptionReady ? "border-border bg-surface" : "border-warning/50 bg-warning/10"
+          className={`panel p-4 text-sm sm:p-5 ${
+            encryptionReady ? "" : "border-warning/40 bg-warning/10"
           }`}
           aria-labelledby="key-storage-heading"
         >
-          <h2 id="key-storage-heading" className="font-semibold text-foreground">
+          <h2 id="key-storage-heading" className="section-title">
             Key storage
           </h2>
           {payload.encryption.ready ? (
-            <p className="mt-1 text-xs text-muted">
+            <p className="mt-1 text-footnote text-muted">
               Keys are encrypted on the server (AES-256-GCM) and never shown
               again after saving, not even to admins.
             </p>
           ) : (
-            <p className="mt-1 break-words text-xs text-warning">
+            <p className="mt-1 break-words text-footnote text-warning">
               Saving keys is disabled: {payload.encryption.message}
             </p>
           )}
@@ -412,11 +412,11 @@ export default function ModelProviderPanel({
       )}
 
       <section className="min-w-0" aria-labelledby="keys-heading">
-        <h2 id="keys-heading" className={LABEL_CLASS}>
+        <h2 id="keys-heading" className="section-title">
           Provider keys (workspace)
         </h2>
         {!payload.canManage && (
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 text-footnote text-muted">
             Only workspace owners and admins can add or replace keys.
           </p>
         )}

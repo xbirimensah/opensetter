@@ -64,10 +64,10 @@ function ConfidenceMeter({ value }: { value: number }) {
     percent >= 78 ? "bg-success" : percent >= 50 ? "bg-warning" : "bg-error";
   return (
     <div className="flex items-center gap-2" title={`Model confidence ${percent}%`}>
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-hover">
-        <div className={`h-full ${tone}`} style={{ width: `${percent}%` }} />
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-fill-strong">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${percent}%` }} />
       </div>
-      <span className="text-[11px] tabular-nums text-muted">{percent}%</span>
+      <span className="text-caption tabular-nums text-muted">{percent}% confident</span>
     </div>
   );
 }
@@ -107,35 +107,39 @@ function DraftCard({ reply, onResolved }: DraftCardProps) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
+    <article className="panel p-4" aria-label={`Draft for ${contactLabel(reply)}`}>
       <div className="flex items-baseline justify-between gap-3">
-        <span className="truncate text-sm font-medium text-foreground">
+        <span className="truncate text-headline font-semibold text-foreground">
           {contactLabel(reply)}
         </span>
-        <span className="shrink-0 text-[11px] text-faint">
+        <span className="shrink-0 text-caption tabular-nums text-faint">
           {formatTime(reply.createdAt)}
         </span>
       </div>
 
-      <p className="mt-2 break-words rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted">
+      {/* Their message as they sent it, then the reply waiting for you. */}
+      <p className="mt-3 w-fit max-w-[90%] break-words rounded-[1.125rem] rounded-bl-md bg-fill-strong px-3 py-2 text-sm text-foreground">
         {reply.inboundText}
       </p>
 
-      <textarea
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        rows={2}
-        className="mt-2 w-full resize-y rounded-lg border border-border bg-surface-hover px-3 py-2 text-base text-foreground focus:border-accent/40 focus:outline-none sm:text-sm"
-      />
+      <label className="mt-3 block">
+        <span className="sr-only">Reply to send</span>
+        <textarea
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          rows={3}
+          className="field field-sizing-content max-h-60 resize-y border-accent/40 bg-accent/[0.06]"
+        />
+      </label>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <ConfidenceMeter value={reply.confidence} />
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => void act("dismiss")}
             disabled={busy !== null}
-            className="min-h-11 rounded-lg px-4 py-1.5 text-sm text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-50 sm:min-h-0 sm:px-3"
+            className="btn btn-quiet"
           >
             Dismiss
           </button>
@@ -143,7 +147,7 @@ function DraftCard({ reply, onResolved }: DraftCardProps) {
             type="button"
             onClick={() => void act("approve")}
             disabled={busy !== null || !text.trim()}
-            className="min-h-11 rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-0 sm:px-3"
+            className="btn btn-primary"
           >
             {busy === "approve" ? "Sending…" : "Approve & send"}
           </button>
@@ -151,12 +155,12 @@ function DraftCard({ reply, onResolved }: DraftCardProps) {
       </div>
 
       {reply.reasons.length > 0 && (
-        <p className="mt-2 text-[11px] text-faint">
+        <p className="mt-3 text-caption text-faint">
           Held because: {reply.reasons.join("; ")}
         </p>
       )}
-      {error && <p className="mt-2 text-xs text-error">{error}</p>}
-    </div>
+      {error && <p role="alert" className="mt-2 text-footnote text-error">{error}</p>}
+    </article>
   );
 }
 
@@ -174,26 +178,27 @@ export default function AiSetterActivity({
   onRefresh,
 }: AiSetterActivityProps) {
   return (
-    <div className="space-y-6">
-      <section>
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold text-foreground">
-            Needs review
-            {held.length > 0 && (
-              <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning">
-                {held.length}
-              </span>
-            )}
-          </h2>
-        </div>
-        <div className="mt-3 space-y-3">
+    <div className="space-y-8">
+      <section aria-labelledby="setter-review">
+        <h2 id="setter-review" className="section-title mb-2.5 flex items-center gap-2 px-1">
+          Needs review
+          {held.length > 0 && (
+            <span className="rounded-full bg-warning/15 px-2 py-px text-caption font-semibold tabular-nums text-warning">
+              {held.length}
+            </span>
+          )}
+        </h2>
+        <div className="space-y-3">
           {loading && held.length === 0 ? (
-            <p className="text-sm text-muted">Loading…</p>
+            <div className="panel h-40" aria-busy="true" aria-label="Loading drafts" />
           ) : held.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
-              Nothing waiting on you. Drafts land here when the setter is in
-              draft mode or a safety gate holds a reply back.
-            </p>
+            <div className="panel px-5 py-8 text-center">
+              <p className="text-sm font-medium text-foreground">Nothing waiting on you</p>
+              <p className="mx-auto mt-1 max-w-xs text-footnote text-muted">
+                Drafts land here when the setter is in draft mode or a safety
+                gate holds a reply back.
+              </p>
+            </div>
           ) : (
             held.map((reply) => (
               <DraftCard key={reply.id} reply={reply} onResolved={onRefresh} />
@@ -202,44 +207,46 @@ export default function AiSetterActivity({
         </div>
       </section>
 
-      <section>
-        <h2 className="text-sm font-semibold text-foreground">Recent activity</h2>
-        <div className="mt-3 overflow-hidden rounded-xl border border-border">
+      <section aria-labelledby="setter-recent">
+        <h2 id="setter-recent" className="section-title mb-2.5 px-1">
+          Recent activity
+        </h2>
+        <div className="panel overflow-hidden">
           {recent.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-muted">
+            <p className="px-5 py-8 text-center text-sm text-muted">
               No setter activity yet.
             </p>
           ) : (
-            recent.map((reply) => {
+            recent.map((reply, index) => {
               const style = STATUS_STYLES[reply.status];
               return (
                 <div
                   key={reply.id}
-                  className="border-b border-border bg-surface px-4 py-3 last:border-b-0"
+                  className={`px-4 py-3 ${index > 0 ? "border-t border-border" : ""}`}
                 >
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-sm text-foreground">
+                    <span className="truncate text-sm font-medium text-foreground">
                       {contactLabel(reply)}
                     </span>
-                    <span className={`shrink-0 text-xs ${style.text}`}>
+                    <span className={`shrink-0 text-footnote font-medium ${style.text}`}>
                       {style.label}
                     </span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted">
+                  <p className="mt-0.5 truncate text-footnote text-muted">
                     {reply.inboundText}
                   </p>
                   {reply.draftText && (
-                    <p className="mt-0.5 truncate text-xs text-faint">
-                      AI: {reply.draftText}
+                    <p className="mt-0.5 truncate text-footnote text-faint">
+                      <span className="font-medium text-accent">AI</span> {reply.draftText}
                     </p>
                   )}
                   {reply.status === "SKIPPED" && reply.reasons.length > 0 && (
-                    <p className="mt-0.5 truncate text-[11px] text-faint">
+                    <p className="mt-0.5 truncate text-caption text-faint">
                       {reply.reasons.join("; ")}
                     </p>
                   )}
                   {reply.errorMessage && (
-                    <p className="mt-0.5 truncate text-[11px] text-error">
+                    <p className="mt-0.5 truncate text-caption text-error">
                       {reply.errorMessage}
                     </p>
                   )}

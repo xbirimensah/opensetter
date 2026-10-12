@@ -33,10 +33,10 @@ export interface FollowerChartPoint {
 // resolve, so the theme tokens are read from the computed style and
 // re-read whenever data-theme flips on <html>.
 const FALLBACK_TOKENS = {
-  series: "#6b8afd", // --color-accent, validated at 3:1 on both surfaces
-  grid: "#2e2e33", // --color-border
-  axis: "#9b9ba3", // --color-muted
-  dotStroke: "#161618", // --color-surface
+  series: "#a610df", // --color-accent, 3.4:1+ against the dark card (non-text)
+  grid: "#2a2a2a", // --color-border
+  axis: "#999999", // --color-muted
+  dotStroke: "#0e0e0e", // --color-surface
 };
 
 function readChartTokens(): typeof FALLBACK_TOKENS {
@@ -95,9 +95,9 @@ function ChartTooltip({
   const point = payload[0].payload;
 
   return (
-    <div className="rounded border border-border bg-surface px-3 py-2 text-xs shadow-lg">
+    <div className="rounded-xl border border-border bg-surface-raised px-3 py-2 text-footnote shadow-[var(--shadow-raised)]">
       <p className="text-muted">{formatDay(point.date)}</p>
-      <p className="mt-1 font-semibold text-foreground">
+      <p className="mt-0.5 font-semibold tabular-nums text-foreground">
         {point.followers.toLocaleString()} followers
       </p>
       {point.delta !== null && point.delta !== 0 && (
@@ -127,13 +127,13 @@ export default function FollowerChart({
     data.length > 1 ? data[data.length - 1].followers - data[0].followers : null;
 
   return (
-    <div className="panel rounded p-6">
+    <section aria-labelledby="follower-chart-title" className="panel p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">
+          <h2 id="follower-chart-title" className="section-title">
             Followers over time
           </h2>
-          <p className="mt-1 text-sm text-muted">
+          <p className="mt-1 text-sm tabular-nums text-muted">
             {current === null
               ? "Follower count unavailable"
               : `${current.toLocaleString()} now`}
@@ -152,7 +152,8 @@ export default function FollowerChart({
           <button
             type="button"
             onClick={() => setShowTable((v) => !v)}
-            className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground"
+            aria-pressed={showTable}
+            className="btn btn-secondary btn-sm"
           >
             {showTable ? "Show chart" : "Show table"}
           </button>
@@ -160,13 +161,13 @@ export default function FollowerChart({
       </div>
 
       {data.length < 2 ? (
-        <div className="mt-6 rounded border border-border bg-surface/60 p-6 text-center">
-          <p className="text-sm text-foreground">Collecting follower history</p>
+        <div className="mt-6 rounded-xl bg-fill px-6 py-8 text-center">
+          <p className="text-sm font-medium text-foreground">Collecting follower history</p>
           <p className="mt-1 text-sm text-muted">
             {data.length === 0
               ? "No snapshots recorded yet."
               : "One day recorded so far."}{" "}
-            A point is added daily — the chart appears once there are at least
+            A point is added daily. The chart appears once there are at least
             two.
           </p>
         </div>
@@ -174,7 +175,7 @@ export default function FollowerChart({
         <div className="mt-4 max-h-72 overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-faint">
+              <tr className="border-b border-border text-left text-caption text-faint">
                 <th className="py-2 pr-4 font-medium">Date</th>
                 <th className="py-2 px-3 font-medium text-right">Followers</th>
                 <th className="py-2 pl-3 font-medium text-right">Change</th>
@@ -186,11 +187,11 @@ export default function FollowerChart({
                   <td className="py-2 pr-4 text-foreground">
                     {formatDay(p.date)}
                   </td>
-                  <td className="py-2 px-3 text-right text-muted">
+                  <td className="py-2 px-3 text-right tabular-nums text-muted">
                     {p.followers.toLocaleString()}
                   </td>
-                  <td className="py-2 pl-3 text-right text-muted">
-                    {p.delta === null ? "—" : formatSigned(p.delta)}
+                  <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                    {p.delta === null ? "n/a" : formatSigned(p.delta)}
                   </td>
                 </tr>
               ))}
@@ -244,6 +245,6 @@ export default function FollowerChart({
           </ResponsiveContainer>
         </div>
       )}
-    </div>
+    </section>
   );
 }

@@ -33,6 +33,7 @@ import Sheet from "@/components/inbox/sheet";
 import Lightbox, { type LightboxImage } from "@/components/inbox/lightbox";
 import { OPTIMISTIC_PREFIX } from "@/components/inbox/message-bubble";
 import { ProfileIcon } from "@/components/inbox/icons";
+import { ChevronLeftIcon, InboxIcon } from "@/components/nav-icons";
 import { PRESS } from "@/components/inbox/ui";
 import { useMediaQuery } from "@/components/inbox/use-media-query";
 
@@ -527,25 +528,12 @@ export default function InboxPage() {
   ) : null;
 
   return (
-    <div className="space-y-4">
-      {/* The top bar already titles the page on mobile; the row only
-          remains there for the account picker. */}
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-        <h1 className="hidden text-lg font-semibold tracking-[-0.01em] text-foreground sm:block">Inbox</h1>
-        {accounts.length > 1 && (
-          <AccountSelect
-            accounts={accounts}
-            value={selectedAccountId}
-            onChange={setSelectedAccountId}
-            includeAll={false}
-          />
-        )}
-      </div>
-
-      {/* Mobile height also clears the bottom nav and safe-area insets. */}
+    <div>
+      {/* The top bar titles the page; the pane fills the rest of the
+          screen. Mobile height also clears the tab bar and safe areas. */}
       <div
-        className={`grid h-[calc(100dvh-12rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[22rem] grid-cols-1 overflow-hidden rounded border border-border sm:grid-cols-[minmax(220px,280px)_minmax(0,1fr)] lg:h-[calc(100dvh-11rem)] ${
-          showColumn ? "xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)_17rem]" : ""
+        className={`panel grid h-[calc(100dvh-10rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[22rem] grid-cols-1 overflow-hidden sm:grid-cols-[minmax(240px,300px)_minmax(0,1fr)] lg:h-[calc(100dvh-7.5rem)] ${
+          showColumn ? "xl:grid-cols-[minmax(240px,300px)_minmax(0,1fr)_18rem]" : ""
         }`}
       >
         {/* Conversation list. On mobile it takes the full pane and is hidden
@@ -555,22 +543,44 @@ export default function InboxPage() {
             active ? "hidden" : "flex"
           }`}
         >
-          <div className="shrink-0 border-b border-border px-4 py-3 text-sm font-semibold text-foreground">
-            Conversations
+          <div className="flex min-h-14 shrink-0 items-center border-b border-border px-3 py-2">
+            {accounts.length > 1 ? (
+              <div className="w-full">
+                <AccountSelect
+                  accounts={accounts}
+                  value={selectedAccountId}
+                  onChange={setSelectedAccountId}
+                  includeAll={false}
+                  hideLabel
+                />
+              </div>
+            ) : (
+              <h2 className="px-1 text-headline font-semibold text-foreground">Conversations</h2>
+            )}
           </div>
           {listMode === "live" && conversations.length > 0 && (
-            <p className="shrink-0 border-b border-border px-4 py-2 text-[11px] leading-snug text-faint">
+            <p className="shrink-0 border-b border-border px-4 py-2 text-caption leading-snug text-faint">
               Showing Instagram&apos;s live inbox. Photos, voice notes and contact profiles appear once
               new messages are mirrored.
             </p>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto">
             {convLoading ? (
-              <p className="px-4 py-6 text-sm text-muted">Loading…</p>
+              <div className="space-y-4 px-4 py-4" aria-busy="true" aria-label="Loading conversations">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="skeleton h-10 w-10 shrink-0 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <div className="skeleton h-3.5 w-28" />
+                      <div className="skeleton h-3 w-40 max-w-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : convError ? (
-              <p className="px-4 py-6 text-sm text-error">{convError}</p>
+              <p role="alert" className="px-4 py-6 text-sm text-error">{convError}</p>
             ) : conversations.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted">No conversations yet.</p>
+              <p className="px-4 py-10 text-center text-sm text-muted">No conversations yet.</p>
             ) : (
               <ConversationList
                 conversations={conversations}
@@ -586,21 +596,22 @@ export default function InboxPage() {
             fills the pane; on sm+ it always sits beside the list. */}
         <div className={`min-h-0 flex-col ${active ? "flex" : "hidden sm:flex"}`}>
           {!active ? (
-            <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted">
-              Select a conversation to read and reply.
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+              <InboxIcon size={28} className="text-quiet" />
+              <p className="text-sm text-muted">Select a conversation to read and reply.</p>
             </div>
           ) : (
             <>
-              <div className="flex min-w-0 shrink-0 items-center gap-2 border-b border-border px-3 py-1.5 text-sm font-semibold text-foreground sm:px-4 sm:py-3">
+              <div className="flex min-h-14 min-w-0 shrink-0 items-center gap-2 border-b border-border px-2 py-1.5 sm:px-4 sm:py-2">
                 <button
                   type="button"
                   onClick={closeConversation}
-                  className="-ml-2 inline-flex min-h-11 min-w-11 items-center justify-center rounded px-2 text-muted hover:text-foreground sm:hidden"
+                  className="press inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-accent sm:hidden"
                   aria-label="Back to conversations"
                 >
-                  Back
+                  <ChevronLeftIcon size={22} />
                 </button>
-                <span className="truncate">
+                <span className="min-w-0 flex-1 truncate text-headline font-semibold text-foreground">
                   {active.contact.username ? `@${active.contact.username}` : "Unknown user"}
                 </span>
                 {(() => {
@@ -612,7 +623,7 @@ export default function InboxPage() {
                       onChange={(e) => void setThreadMode(e.target.value)}
                       disabled={aiBusy}
                       title="How the AI setter handles this thread"
-                      className="ml-auto min-h-11 max-w-[11rem] shrink-0 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-medium text-muted focus:border-accent/40 focus:outline-none disabled:opacity-50 sm:min-h-0 sm:text-[11px]"
+                      className="min-h-11 w-[7.5rem] shrink-0 truncate rounded-full border-0 sm:w-auto sm:max-w-[11rem] bg-fill px-3 py-1 text-footnote font-medium text-muted hover:bg-fill-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-50 sm:min-h-8"
                     >
                       {THREAD_MODES.map((mode) => (
                         <option key={mode.value} value={mode.value}>
@@ -628,10 +639,10 @@ export default function InboxPage() {
                   aria-label={isWide ? (panelOpen ? "Hide contact profile" : "Show contact profile") : "Open contact profile"}
                   aria-expanded={isWide ? panelOpen : sheetOpen}
                   title="Contact profile"
-                  className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border sm:min-h-8 sm:min-w-8 ${PRESS} ${
+                  className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full sm:min-h-8 sm:min-w-8 ${PRESS} ${
                     showColumn
-                      ? "border-accent/40 bg-accent/10 text-accent"
-                      : "border-border text-muted hover:bg-surface-hover hover:text-foreground"
+                      ? "bg-accent/15 text-accent"
+                      : "text-muted hover:bg-fill hover:text-foreground"
                   }`}
                 >
                   <ProfileIcon />
@@ -655,10 +666,10 @@ export default function InboxPage() {
                 if (!heldDraft) return null;
                 const editValue = draftEdits[heldDraft.id] ?? heldDraft.draftText;
                 return (
-                  <div className="shrink-0 border-t border-accent/30 bg-accent/5 p-3">
+                  <div className="shrink-0 border-t border-accent/30 bg-accent/[0.07] p-3 sm:px-4">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-                      <span className="text-xs font-semibold text-accent">AI draft waiting for review</span>
-                      <span className="text-[11px] tabular-nums text-muted">
+                      <span className="text-footnote font-semibold text-accent">AI draft waiting for review</span>
+                      <span className="text-caption tabular-nums text-muted">
                         {Math.round(heldDraft.confidence * 100)}% confident
                       </span>
                     </div>
@@ -671,18 +682,18 @@ export default function InboxPage() {
                         }))
                       }
                       rows={2}
-                      className="mt-2 w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-base text-foreground focus:border-accent/40 focus:outline-none sm:text-sm"
+                      className="field field-sizing-content mt-2 max-h-48 resize-y"
                     />
-                    <p className="mt-1 text-[11px] text-faint">
+                    <p className="mt-1 text-caption text-faint">
                       Edits before sending are saved as a voice correction for this contact.
                     </p>
-                    {draftError && <p className="mt-1 text-xs text-error">{draftError}</p>}
+                    {draftError && <p role="alert" className="mt-1 text-footnote text-error">{draftError}</p>}
                     <div className="mt-2 flex justify-end gap-2">
                       <button
                         type="button"
                         onClick={() => void actOnDraft(heldDraft.id, "dismiss")}
                         disabled={aiBusy}
-                        className={`min-h-11 rounded-lg px-4 py-1.5 text-sm text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-50 sm:min-h-0 sm:px-3 sm:text-xs ${PRESS}`}
+                        className="btn btn-quiet btn-sm"
                       >
                         Dismiss
                       </button>
@@ -690,7 +701,7 @@ export default function InboxPage() {
                         type="button"
                         onClick={() => void actOnDraft(heldDraft.id, "approve")}
                         disabled={aiBusy || !editValue.trim()}
-                        className={`min-h-11 rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-0 sm:px-3 sm:text-xs ${PRESS}`}
+                        className="btn btn-primary btn-sm"
                       >
                         Approve & send
                       </button>
@@ -700,7 +711,7 @@ export default function InboxPage() {
               })()}
 
               <div className="shrink-0 border-t border-border p-2 sm:p-3">
-                {sendError && <p className="mb-2 text-xs text-error">{sendError}</p>}
+                {sendError && <p role="alert" className="mb-2 px-1 text-footnote text-error">{sendError}</p>}
                 <div className="flex items-end gap-2">
                   <textarea
                     value={draft}
@@ -712,13 +723,13 @@ export default function InboxPage() {
                     placeholder="Write a reply…"
                     title="Enter to send, Shift+Enter for a new line"
                     // 16px on phones: iOS zooms into smaller focused inputs.
-                    className="max-h-32 min-h-11 min-w-0 flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-base text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none sm:min-h-[40px] sm:text-sm"
+                    className="field max-h-32 min-w-0 flex-1 resize-none rounded-[1.25rem] px-4"
                   />
                   <button
                     type="button"
                     onClick={() => void handleSend()}
                     disabled={sending || !draft.trim()}
-                    className={`min-h-11 shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-0 ${PRESS}`}
+                    className="btn btn-primary min-h-11 shrink-0 sm:min-h-10"
                   >
                     {sending ? "Sending…" : "Send"}
                   </button>
@@ -730,7 +741,7 @@ export default function InboxPage() {
 
         {/* Contact profile: a third column on wide screens. */}
         {showColumn && (
-          <aside aria-label="Contact profile" className="hidden min-h-0 overflow-y-auto border-l border-border xl:block">
+          <aside aria-label="Contact profile" className="hidden min-h-0 overflow-y-auto border-l border-border bg-background/40 xl:block">
             {contactPanel}
           </aside>
         )}

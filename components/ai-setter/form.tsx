@@ -51,12 +51,23 @@ export type UpdateForm = <K extends keyof SetterConfigForm>(
   value: SetterConfigForm[K]
 ) => void;
 
-/** Shared input styling: 16px text on phones so iOS does not zoom in. */
-export const INPUT_CLASS =
-  "mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none sm:py-2 sm:text-sm";
+/** Shared input styling (see .field in globals.css): 16px text on phones so iOS does not zoom in. */
+export const INPUT_CLASS = "field mt-1.5";
 
-export const LABEL_CLASS =
-  "text-xs font-semibold uppercase tracking-wide text-faint";
+/** Form label: sentence case, one step under body. */
+export const LABEL_CLASS = "field-label";
+
+/**
+ * Settings-style list of switches: one card, rows separated by inset
+ * hairlines, so related options read as one group.
+ */
+export function ToggleGroup({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="panel overflow-hidden [&>*+*]:border-t [&>*+*]:border-border">
+      {children}
+    </div>
+  );
+}
 
 export function Toggle({
   checked,
@@ -78,19 +89,21 @@ export function Toggle({
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="flex min-h-11 w-full items-start justify-between gap-4 rounded-xl border border-border bg-surface px-4 py-3 text-left hover:border-border-hover disabled:opacity-50"
+      className="flex min-h-14 w-full items-start justify-between gap-4 bg-surface px-4 py-3.5 text-left transition-colors duration-150 hover:bg-surface-hover active:bg-surface-hover disabled:opacity-50"
     >
       <span className="min-w-0">
-        <span className="block text-sm text-foreground">{label}</span>
-        <span className="mt-0.5 block text-xs text-muted">{hint}</span>
+        <span className="block text-sm font-medium text-foreground">{label}</span>
+        <span className="mt-0.5 block text-footnote leading-snug text-muted">{hint}</span>
       </span>
+      {/* 51x31 track like a system switch, scaled to the row. */}
       <span
-        className={`mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
-          checked ? "bg-accent" : "bg-surface-hover"
+        aria-hidden="true"
+        className={`mt-0.5 inline-flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ${
+          checked ? "bg-accent" : "bg-fill-strong"
         }`}
       >
         <span
-          className={`h-4 w-4 rounded-full bg-white transition-transform ${
+          className={`h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.3)] transition-transform duration-300 ease-spring ${
             checked ? "translate-x-4" : "translate-x-0"
           }`}
         />
@@ -118,16 +131,16 @@ export function SaveBar({
         type="button"
         onClick={onSave}
         disabled={saving || disabled}
-        className="min-h-11 w-full rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-0 sm:w-auto"
+        className="btn btn-primary w-full sm:w-auto"
       >
         {saving ? "Saving…" : "Save settings"}
       </button>
-      {saveState === "saved" && <span className="text-sm text-success">Saved.</span>}
-      {saveState === "error" && (
-        <span className="text-sm text-error">
-          {errorMessage ?? "Could not save, try again."}
-        </span>
-      )}
+      <span role="status" aria-live="polite" className="text-footnote">
+        {saveState === "saved" && <span className="text-success">Saved.</span>}
+        {saveState === "error" && (
+          <span className="text-error">{errorMessage ?? "Could not save, try again."}</span>
+        )}
+      </span>
     </div>
   );
 }

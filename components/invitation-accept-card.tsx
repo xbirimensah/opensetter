@@ -37,7 +37,7 @@ export default function InvitationAcceptCard({
     return (
       <a
         href="/login"
-        className="inline-flex items-center justify-center rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-hover"
+        className="btn btn-primary min-h-11 w-full sm:w-auto"
       >
         Sign in to accept
       </a>
@@ -50,12 +50,12 @@ export default function InvitationAcceptCard({
         type="button"
         onClick={acceptInvite}
         disabled={busy}
-        className="inline-flex items-center justify-center rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:opacity-50"
+        className="btn btn-primary min-h-11 w-full sm:w-auto"
       >
-        {busy ? "Accepting..." : "Accept invitation"}
+        {busy ? "Accepting…" : "Accept invitation"}
       </button>
-      {message && <p className="text-sm text-error">{message}</p>}
-      <p className="text-xs text-muted">
+      {message && <p role="alert" className="text-sm text-error">{message}</p>}
+      <p className="text-footnote text-muted">
         Use the magic link account for {invitedEmail}.
       </p>
     </div>

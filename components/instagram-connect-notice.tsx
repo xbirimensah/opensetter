@@ -1,13 +1,14 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import { AlertIcon, CheckCircleIcon } from "@/components/nav-icons";
 
 type Tone = "error" | "warning" | "success";
 
-const TONE_CLASSES: Record<Tone, string> = {
-  error: "border-error/20 bg-error/10 text-error",
-  warning: "border-warning/20 bg-warning/10 text-warning",
-  success: "border-success/20 bg-success/10 text-success",
+const TONE_CLASSES: Record<Tone, { box: string; title: string }> = {
+  error: { box: "border-error/30 bg-error/10", title: "text-error" },
+  warning: { box: "border-warning/30 bg-warning/10", title: "text-warning" },
+  success: { box: "border-success/30 bg-success/10", title: "text-success" },
 };
 
 const MESSAGES: Record<string, { tone: Tone; title: string; detail: string }> = {
@@ -66,16 +67,16 @@ export function InstagramConnectNotice() {
         {missing.length > 0 && (
           <ul className="mt-2 space-y-1">
             {missing.map((name) => (
-              <li key={name} className="font-mono text-xs">
+              <li key={name} className="font-mono text-footnote text-foreground">
                 {name}
               </li>
             ))}
           </ul>
         )}
         <p className="mt-2">
-          See <span className="font-mono text-xs">docs/setup.md</span> for how to
+          See <span className="font-mono text-footnote text-foreground">docs/setup.md</span> for how to
           obtain each value. Note that{" "}
-          <span className="font-mono text-xs">ENCRYPTION_KEY</span> must be a
+          <span className="font-mono text-footnote text-foreground">ENCRYPTION_KEY</span> must be a
           64-character hex string.
         </p>
       </Notice>
@@ -93,7 +94,7 @@ export function InstagramConnectNotice() {
           missing the required permissions.
         </p>
         {reason && (
-          <p className="mt-2 font-mono text-xs break-words opacity-80">
+          <p className="mt-2 break-words font-mono text-footnote text-foreground">
             {reason}
           </p>
         )}
@@ -121,9 +122,19 @@ function Notice({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`rounded border p-4 text-sm ${TONE_CLASSES[tone]}`}>
-      <p className="font-semibold">{title}</p>
-      <div className="mt-1 opacity-90">{children}</div>
+    <div
+      role={tone === "success" ? "status" : "alert"}
+      className={`flex gap-3 rounded-2xl border p-4 text-sm ${TONE_CLASSES[tone].box}`}
+    >
+      {tone === "success" ? (
+        <CheckCircleIcon size={20} className={`mt-px shrink-0 ${TONE_CLASSES[tone].title}`} />
+      ) : (
+        <AlertIcon size={20} className={`mt-px shrink-0 ${TONE_CLASSES[tone].title}`} />
+      )}
+      <div className="min-w-0">
+        <p className={`font-semibold ${TONE_CLASSES[tone].title}`}>{title}</p>
+        <div className="mt-1 leading-relaxed text-muted">{children}</div>
+      </div>
     </div>
   );
 }

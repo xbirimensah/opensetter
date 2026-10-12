@@ -38,9 +38,9 @@ export default function Sheet({ open, onClose, title, children }: SheetProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[85dvh] flex-col rounded-t-2xl border border-border bg-surface text-foreground shadow-2xl sm:h-full sm:max-h-none sm:rounded-none sm:border-y-0 sm:border-r-0">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2">
-          <h2 className="text-sm font-semibold">{title}</h2>
+      <div className="flex max-h-[85dvh] flex-col rounded-t-[1.375rem] border border-border bg-surface-raised text-foreground shadow-[var(--shadow-raised)] sm:h-full sm:max-h-none sm:rounded-none sm:border-y-0 sm:border-r-0">
+        <div className="flex min-h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2">
+          <h2 className="text-headline font-semibold">{title}</h2>
           <button
             type="button"
             onClick={onClose}

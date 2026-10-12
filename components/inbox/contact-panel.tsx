@@ -29,10 +29,9 @@ interface ContactPanelProps {
   onUpdated: (contact: InboxContact) => void;
 }
 
-const INPUT =
-  "min-h-11 w-full min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-base text-foreground placeholder:text-faint focus:border-accent/40 focus:outline-none sm:min-h-9 sm:text-sm";
-const BUTTON_PRIMARY = `min-h-11 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-9 ${PRESS}`;
-const BUTTON_QUIET = `min-h-11 shrink-0 rounded-lg px-3 text-sm text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-50 sm:min-h-9 ${PRESS}`;
+const INPUT = "field";
+const BUTTON_PRIMARY = "btn btn-primary btn-sm shrink-0";
+const BUTTON_QUIET = "btn btn-quiet btn-sm shrink-0";
 
 async function send<T>(url: string, method: "PATCH" | "POST", body: unknown): Promise<{ data?: T; error?: string }> {
   try {
@@ -152,7 +151,7 @@ function ProfileHeader({ username }: { username: string | null }) {
   return (
     <div className="flex items-center gap-3">
       <span
-        className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface-hover text-lg font-semibold text-muted"
+        className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-fill-strong text-lg font-semibold text-muted"
         aria-hidden="true"
       >
         {initial}
@@ -195,7 +194,7 @@ function FlowRunCard({ run, onStop }: { run: InboxFlowRun; onStop: () => Promise
   }
 
   return (
-    <div className="rounded-xl border border-border bg-background p-3">
+    <div className="rounded-xl bg-fill p-3">
       <div className="flex items-start gap-2">
         <span className="mt-0.5 text-accent">
           <FlowIcon />
@@ -228,7 +227,7 @@ function FlowRunCard({ run, onStop }: { run: InboxFlowRun; onStop: () => Promise
               type="button"
               onClick={() => void stop()}
               disabled={stopping}
-              className={`min-h-11 shrink-0 rounded-lg bg-error px-3 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 sm:min-h-9 ${PRESS}`}
+              className="btn btn-danger btn-sm shrink-0"
             >
               {stopping ? "Stopping…" : "Stop flow"}
             </button>
@@ -238,7 +237,7 @@ function FlowRunCard({ run, onStop }: { run: InboxFlowRun; onStop: () => Promise
         <button
           type="button"
           onClick={() => setConfirming(true)}
-          className={`mt-3 min-h-11 w-full rounded-lg border border-border text-sm font-medium text-error hover:bg-surface-hover sm:min-h-9 ${PRESS}`}
+          className="btn btn-secondary mt-3 w-full text-error"
         >
           Stop flow
         </button>
@@ -349,7 +348,7 @@ function InlineField({
           <button
             type="button"
             onClick={start}
-            className={`-mx-2 block min-h-11 w-[calc(100%+1rem)] rounded-lg px-2 py-1.5 text-left text-sm hover:bg-surface-hover sm:min-h-0 ${PRESS}`}
+            className={`-mx-2 block min-h-11 w-[calc(100%+1rem)] rounded-lg px-2 py-1.5 text-left text-sm hover:bg-fill sm:min-h-0 ${PRESS}`}
           >
             {value ? (
               <span className="block break-words text-foreground">{value}</span>
@@ -403,7 +402,7 @@ function TagsEditor({
           {tags.map((tag) => (
             <li
               key={tag}
-              className="inline-flex max-w-full items-center gap-0.5 rounded-full bg-surface-hover py-0.5 pl-2.5 pr-0.5 text-xs text-foreground"
+              className="inline-flex max-w-full items-center gap-0.5 rounded-full bg-fill-strong py-0.5 pl-2.5 pr-0.5 text-footnote text-foreground"
             >
               <span className="truncate">{tag}</span>
               <button
@@ -435,7 +434,7 @@ function TagsEditor({
           type="submit"
           disabled={busy !== null || !draft.trim()}
           aria-label="Add tag"
-          className={`inline-flex min-h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-50 sm:min-h-9 sm:w-9 ${PRESS}`}
+          className={`inline-flex min-h-11 w-11 shrink-0 items-center justify-center rounded-full bg-fill text-muted hover:bg-fill-strong hover:text-foreground disabled:opacity-50 sm:min-h-9 sm:w-9 ${PRESS}`}
         >
           <PlusIcon />
         </button>

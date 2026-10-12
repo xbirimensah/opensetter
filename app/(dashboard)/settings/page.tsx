@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import type { AccountOption } from "@/components/account-select";
+import { SelectChevron, type AccountOption } from "@/components/account-select";
 import { InstagramConnectNotice } from "@/components/instagram-connect-notice";
 import PasswordSettings from "@/components/password-settings";
 
@@ -120,7 +120,18 @@ export default function SettingsPage() {
   }
 
   if (loading) {
-    return <div className="panel rounded p-8 h-64" />;
+    return (
+      <div className="max-w-2xl space-y-8" aria-busy="true" aria-label="Loading settings">
+        <div className="space-y-3">
+          <div className="skeleton h-4 w-24" />
+          <div className="panel h-40" />
+        </div>
+        <div className="space-y-3">
+          <div className="skeleton h-4 w-24" />
+          <div className="panel h-56" />
+        </div>
+      </div>
+    );
   }
 
   const accounts = data?.instagramAccounts ?? [];
@@ -129,7 +140,7 @@ export default function SettingsPage() {
     membersData?.currentUserRole === "ADMIN";
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-2xl space-y-10">
       {/* Surfaces the ?instagram= code the OAuth routes redirect back with.
           Needs a Suspense boundary: useSearchParams in a prerendered client
           page fails the production build without one. */}
@@ -137,205 +148,235 @@ export default function SettingsPage() {
         <InstagramConnectNotice />
       </Suspense>
 
-      <section className="panel rounded p-6">
-        <h2 className="text-base font-semibold mb-6">Instagram Connection</h2>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between py-3 border-b border-border">
-            <div>
-              <p className="text-sm font-medium text-foreground">Status</p>
-              <p className="text-xs text-muted mt-0.5">
-                Comment webhooks and private replies depend on this connection.
-              </p>
-            </div>
+      <section aria-labelledby="settings-instagram">
+        <div className="mb-2.5 flex items-center justify-between gap-3 px-1">
+          <h2 id="settings-instagram" className="section-title">
+            Instagram connection
+          </h2>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-footnote font-medium ${
+              accounts.length > 0
+                ? "bg-success/12 text-success"
+                : "bg-warning/12 text-warning"
+            }`}
+          >
             <span
-              className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                accounts.length > 0
-                  ? "bg-success/10 text-success"
-                  : "bg-warning/10 text-warning"
-              }`}
+              aria-hidden="true"
+              className={`h-1.5 w-1.5 rounded-full ${accounts.length > 0 ? "bg-success" : "bg-warning"}`}
+            />
+            {accounts.length > 0 ? "Connected" : "Not connected"}
+          </span>
+        </div>
+        <div className="panel overflow-hidden">
+          <div className="px-4 py-3.5 sm:px-5">
+            <p className="text-sm text-muted">
+              Comment webhooks and private replies depend on this connection.
+            </p>
+            <p className="mt-0.5 text-footnote text-faint">
+              {accounts.length} connected Instagram profile
+              {accounts.length === 1 ? "" : "s"}
+            </p>
+          </div>
+
+          {accounts.length === 0 && (
+            <p className="border-t border-border px-4 py-4 text-sm text-muted sm:px-5">
+              Connect an Instagram professional account to launch campaigns.
+            </p>
+          )}
+          {accounts.map((account) => (
+            <div
+              key={account.id}
+              className="flex items-center justify-between gap-3 border-t border-border px-4 py-3.5 sm:px-5"
             >
-              {accounts.length > 0 ? "Connected" : "Not connected"}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between py-3 border-b border-border">
-            <div>
-              <p className="text-sm font-medium text-foreground">Accounts</p>
-              <p className="text-xs text-muted mt-0.5">
-                {accounts.length} connected Instagram profile
-                {accounts.length === 1 ? "" : "s"}
-              </p>
-            </div>
-            <span className="text-sm text-muted">
-              {accounts.length > 0 ? `${accounts.length} connected` : "None"}
-            </span>
-          </div>
-
-          <div className="space-y-3 py-3">
-            {accounts.length === 0 && (
-              <p className="text-sm text-muted">
-                Connect an Instagram professional account to launch campaigns.
-              </p>
-            )}
-            {accounts.map((account) => (
-              <div
-                key={account.id}
-                className="flex flex-col gap-3 rounded border border-border bg-surface/70 p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fill-strong text-headline font-semibold text-muted"
+                >
+                  {account.username.charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">
                     @{account.username}
                   </p>
-                  <p className="mt-1 text-xs text-muted">
+                  <p className="mt-0.5 text-footnote text-muted">
                     Token expires{" "}
                     {account.tokenExpiresAt
                       ? new Date(account.tokenExpiresAt).toLocaleDateString()
                       : "not available"}{" "}
-                    · {account.webhookSubscribed ? "Webhook ready" : "Webhook pending"}
+                    ·{" "}
+                    <span className={account.webhookSubscribed ? "text-success" : "text-warning"}>
+                      {account.webhookSubscribed ? "Webhook ready" : "Webhook pending"}
+                    </span>
                   </p>
                 </div>
-                <button
-                  onClick={() => disconnectInstagram(account.id)}
-                  disabled={busy === `disconnect:${account.id}`}
-                  className="inline-flex items-center justify-center rounded border border-error/20 px-4 py-2 text-sm font-medium text-error transition-all hover:border-error/40 hover:bg-error/10 disabled:opacity-50"
-                >
-                  {busy === `disconnect:${account.id}`
-                    ? "Disconnecting..."
-                    : "Disconnect"}
-                </button>
               </div>
-            ))}
-          </div>
-        </div>
+              <button
+                type="button"
+                onClick={() => disconnectInstagram(account.id)}
+                disabled={busy === `disconnect:${account.id}`}
+                className="btn btn-secondary btn-sm shrink-0 text-error"
+              >
+                {busy === `disconnect:${account.id}`
+                  ? "Disconnecting…"
+                  : "Disconnect"}
+              </button>
+            </div>
+          ))}
 
-        <div className="mt-6 pt-4 border-t border-border flex gap-3">
-          <a
-            href="/api/instagram/connect"
-            className="px-4 py-2 rounded text-sm font-medium transition-colors bg-accent text-white hover:bg-accent-hover"
-          >
-            {accounts.length > 0 ? "Connect another account" : "Connect Instagram"}
-          </a>
+          <div className="border-t border-border px-4 py-3.5 sm:px-5">
+            <a
+              href="/api/instagram/connect"
+              className={`btn ${accounts.length > 0 ? "btn-secondary" : "btn-primary"}`}
+            >
+              {accounts.length > 0 ? "Connect another account" : "Connect Instagram"}
+            </a>
+          </div>
         </div>
       </section>
 
       <PasswordSettings />
 
-      <section className="panel rounded p-6">
-        <h2 className="text-base font-semibold mb-6">Team</h2>
-        <div className="space-y-3">
-          {membersData?.members.map((member) => (
-            <div
-              key={member.id}
-              className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {member.user.name ?? member.user.email ?? "Unknown member"}
-                </p>
-                <p className="text-xs text-muted">{member.user.email}</p>
-              </div>
-              <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted">
-                {member.role}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {membersData?.invitations.length ? (
-          <div className="mt-6 border-t border-border pt-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-faint">
-              Pending invites
-            </p>
-            <div className="space-y-3">
-              {membersData.invitations.map((invitation) => (
-                <div
-                  key={invitation.id}
-                  className="flex flex-col gap-3 rounded border border-border bg-surface/70 p-3 sm:flex-row sm:items-center sm:justify-between"
-                >
+      <section aria-labelledby="settings-team">
+        <h2 id="settings-team" className="section-title mb-2.5 px-1">
+          Team
+        </h2>
+        <div className="panel overflow-hidden">
+          {membersData?.members.map((member, index) => {
+            const display = member.user.name ?? member.user.email ?? "Unknown member";
+            return (
+              <div
+                key={member.id}
+                className={`flex items-center justify-between gap-4 px-4 py-3 sm:px-5 ${
+                  index > 0 ? "border-t border-border" : ""
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-fill-strong text-footnote font-semibold text-muted"
+                  >
+                    {display.charAt(0).toUpperCase()}
+                  </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {invitation.email}
-                    </p>
-                    <p className="truncate text-xs text-muted">
-                      {invitation.role} · {invitation.inviteUrl}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void navigator.clipboard?.writeText(invitation.inviteUrl)
-                      }
-                      className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground"
-                    >
-                      Copy
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeInvitation(invitation.id)}
-                      disabled={busy === `invite:${invitation.id}`}
-                      className="rounded-lg border border-error/20 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:opacity-50"
-                    >
-                      Revoke
-                    </button>
+                    <p className="truncate text-sm font-medium text-foreground">{display}</p>
+                    <p className="truncate text-footnote text-muted">{member.user.email}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+                <span className="shrink-0 rounded-full bg-fill px-2.5 py-1 text-caption font-semibold text-muted">
+                  {member.role.charAt(0) + member.role.slice(1).toLowerCase()}
+                </span>
+              </div>
+            );
+          })}
 
-        {canManageMembers && (
-          <form
-            onSubmit={inviteMember}
-            className="mt-6 grid gap-3 border-t border-border pt-4 sm:grid-cols-[1fr_140px_auto]"
-          >
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(event) => setInviteEmail(event.target.value)}
-              placeholder="teammate@agency.com"
-              className="rounded border border-border bg-surface px-4 py-2 text-sm text-foreground outline-none transition-colors focus:border-accent/40"
-              required
-            />
-            <select
-              value={inviteRole}
-              onChange={(event) =>
-                setInviteRole(event.target.value as "ADMIN" | "MEMBER")
-              }
-              className="rounded border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-accent/40"
+          {membersData?.invitations.length ? (
+            <div className="border-t border-border px-4 py-3.5 sm:px-5">
+              <p className="mb-2.5 text-footnote font-semibold text-muted">Pending invites</p>
+              <div className="space-y-2">
+                {membersData.invitations.map((invitation) => (
+                  <div
+                    key={invitation.id}
+                    className="flex flex-col gap-3 rounded-xl bg-fill p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {invitation.email}
+                      </p>
+                      <p className="truncate text-footnote text-muted">
+                        {invitation.role.charAt(0) + invitation.role.slice(1).toLowerCase()} ·{" "}
+                        {invitation.inviteUrl}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void navigator.clipboard?.writeText(invitation.inviteUrl)
+                        }
+                        className="btn btn-secondary btn-sm"
+                      >
+                        Copy link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeInvitation(invitation.id)}
+                        disabled={busy === `invite:${invitation.id}`}
+                        className="btn btn-quiet btn-sm text-error"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {canManageMembers && (
+            <form
+              onSubmit={inviteMember}
+              className="grid gap-2 border-t border-border px-4 py-3.5 sm:grid-cols-[1fr_8.5rem_auto] sm:px-5"
             >
-              <option value="MEMBER">Member</option>
-              <option value="ADMIN">Admin</option>
-            </select>
-            <button
-              type="submit"
-              disabled={busy === "invite"}
-              className="rounded bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
-            >
-              {busy === "invite" ? "Inviting..." : "Invite"}
-            </button>
-            {memberError && (
-              <p className="sm:col-span-3 text-sm text-error">{memberError}</p>
-            )}
-          </form>
-        )}
+              <label className="sr-only" htmlFor="invite-email">
+                Teammate email
+              </label>
+              <input
+                id="invite-email"
+                type="email"
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                placeholder="teammate@agency.com"
+                className="field"
+                required
+              />
+              <label className="sr-only" htmlFor="invite-role">
+                Role
+              </label>
+              <span className="relative block">
+                <select
+                  id="invite-role"
+                  value={inviteRole}
+                  onChange={(event) =>
+                    setInviteRole(event.target.value as "ADMIN" | "MEMBER")
+                  }
+                  className="field appearance-none pr-9"
+                >
+                  <option value="MEMBER">Member</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+                <SelectChevron />
+              </span>
+              <button
+                type="submit"
+                disabled={busy === "invite"}
+                className="btn btn-primary min-h-11 sm:min-h-10"
+              >
+                {busy === "invite" ? "Inviting…" : "Invite"}
+              </button>
+              {memberError && (
+                <p role="alert" className="text-sm text-error sm:col-span-3">{memberError}</p>
+              )}
+            </form>
+          )}
+        </div>
       </section>
 
-      <section className="panel rounded p-6">
-        <h2 className="text-base font-semibold mb-6">Usage</h2>
-        <div className="flex items-center justify-between py-3">
+      <section aria-labelledby="settings-usage">
+        <h2 id="settings-usage" className="section-title mb-2.5 px-1">
+          Usage
+        </h2>
+        <div className="panel flex items-center justify-between gap-4 px-4 py-3.5 sm:px-5">
           <div>
             <p className="text-sm font-medium text-foreground">
               DMs sent this month
             </p>
-            <p className="text-xs text-muted mt-0.5">
-              Self-hosted — no plan limits.
+            <p className="mt-0.5 text-footnote text-muted">
+              Self-hosted, so there are no plan limits.
             </p>
           </div>
-          <span className="text-sm font-semibold text-foreground">
-            {data?.workspace.dmsSentThisPeriod ?? 0}
+          <span className="text-title-3 font-semibold tabular-nums text-foreground">
+            {(data?.workspace.dmsSentThisPeriod ?? 0).toLocaleString()}
           </span>
         </div>
       </section>

@@ -16,7 +16,7 @@ function formatDate(date: Date | null) {
   });
 }
 
-function MetricCard({
+function MetricCell({
   label,
   value,
   helper,
@@ -26,14 +26,10 @@ function MetricCard({
   helper: string;
 }) {
   return (
-    <div className="border border-white/10 bg-white/[0.035] p-5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-        {label}
-      </p>
-      <p className="mt-3 text-3xl font-black tracking-tight text-white">
-        {value}
-      </p>
-      <p className="mt-2 text-xs leading-5 text-zinc-400">{helper}</p>
+    <div className="min-w-0 bg-surface px-5 py-5">
+      <p className="text-footnote text-muted">{label}</p>
+      <p className="mt-1 text-metric font-semibold tabular-nums text-foreground">{value}</p>
+      <p className="mt-2 text-caption leading-snug text-faint">{helper}</p>
     </div>
   );
 }
@@ -73,175 +69,182 @@ export default async function ReportPage({ params }: ReportPageProps) {
 
   return (
     <main className="min-h-screen bg-background text-foreground" data-theme="dark">
-      <section className="border-b border-white/10 bg-zinc-950/70">
-        <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-wide text-cyan-200">
-                Client campaign report
-              </p>
-              <h1 className="mt-4 max-w-3xl text-4xl font-black leading-tight text-white sm:text-5xl">
-                {report.campaign.name}
-              </h1>
-              <div className="mt-5 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
-                <span>@{report.campaign.instagramUsername}</span>
-                {report.campaign.goal && (
-                  <>
-                    <span>·</span>
-                    <span>{report.campaign.goal}</span>
-                  </>
-                )}
-                <span>·</span>
-                <span>
-                  {report.campaign.isActive ? "Active campaign" : "Paused campaign"}
-                </span>
-              </div>
-            </div>
-
-            <div className="border border-white/10 bg-white/[0.035] p-4 text-sm text-zinc-300 md:min-w-64">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Workspace
-              </p>
-              <p className="mt-2 font-bold text-white">{report.workspace.name}</p>
-              <p className="mt-4 text-xs text-zinc-500">
-                Generated {formatDate(report.generatedAt)}
-              </p>
-              {report.branded && (
-                <Link
-                  href="/"
-                  className="mt-4 inline-flex items-center justify-center border border-cyan-200/20 bg-cyan-300/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:border-cyan-200/40"
-                >
-                  Powered by OpenSetter
-                </Link>
+      <header className="mx-auto w-full max-w-6xl px-5 pb-8 pt-12 sm:px-6 sm:pt-16 lg:px-8">
+        <div className="flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <p className="text-footnote font-semibold text-accent">Client campaign report</p>
+            <h1 className="mt-3 max-w-3xl text-[2.5rem] font-bold leading-[1.06] tracking-[-0.026em] text-foreground sm:text-5xl">
+              {report.campaign.name}
+            </h1>
+            <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+              <span>@{report.campaign.instagramUsername}</span>
+              {report.campaign.goal && (
+                <>
+                  <span aria-hidden="true" className="text-quiet">·</span>
+                  <span>{report.campaign.goal}</span>
+                </>
               )}
-            </div>
+              <span aria-hidden="true" className="text-quiet">·</span>
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    report.campaign.isActive ? "bg-success" : "bg-quiet"
+                  }`}
+                />
+                {report.campaign.isActive ? "Active campaign" : "Paused campaign"}
+              </span>
+            </p>
+          </div>
+
+          <div className="panel p-4 md:min-w-64">
+            <p className="text-caption text-faint">Workspace</p>
+            <p className="mt-1 text-headline font-semibold text-foreground">
+              {report.workspace.name}
+            </p>
+            <p className="mt-3 text-caption text-faint">
+              Generated {formatDate(report.generatedAt)}
+            </p>
+            {report.branded && (
+              <Link href="/" className="btn btn-secondary btn-sm mt-4">
+                Powered by OpenSetter
+              </Link>
+            )}
           </div>
         </div>
-      </section>
+      </header>
 
-      <section className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-6 lg:px-8">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <MetricCard
+      <section className="mx-auto w-full max-w-6xl space-y-6 px-5 pb-16 sm:px-6 lg:px-8">
+        <div className="panel grid grid-cols-2 gap-px overflow-hidden bg-border lg:grid-cols-5">
+          <MetricCell
             label="DMs sent"
             value={report.metrics.sent}
             helper="Private replies successfully sent."
           />
-          <MetricCard
+          <MetricCell
             label="Skipped"
             value={report.metrics.skipped}
             helper="Duplicates, limits, or no-send outcomes."
           />
-          <MetricCard
+          <MetricCell
             label="Failed"
             value={report.metrics.failed}
             helper="Replies that need operational review."
           />
-          <MetricCard
+          <MetricCell
             label="Clicks"
             value={report.metrics.clicks}
             helper="Tracked link visits from replies."
           />
-          <MetricCard
-            label="CTR"
-            value={`${report.metrics.ctr}%`}
-            helper="Clicks divided by sent replies."
-          />
+          <div className="col-span-2 bg-surface lg:col-span-1">
+            <MetricCell
+              label="CTR"
+              value={`${report.metrics.ctr}%`}
+              helper="Clicks divided by sent replies."
+            />
+          </div>
         </div>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
-          <section className="border border-white/10 bg-white/[0.035] p-6">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
+          <section aria-labelledby="report-week" className="panel p-5 sm:p-6">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
               <div>
-                <h2 className="text-xl font-black text-white">
-                  Last 7 Days
+                <h2 id="report-week" className="text-title-3 font-semibold text-foreground">
+                  Last 7 days
                 </h2>
-                <p className="mt-2 text-sm text-zinc-400">
+                <p className="mt-1 text-sm text-muted">
                   Sent replies and tracked clicks by day.
                 </p>
               </div>
-              <p className="text-xs text-zinc-500">
+              <p className="text-caption text-faint">
                 Last send: {formatDate(report.metrics.latestSentAt)}
               </p>
             </div>
-            <div className="mt-8 grid h-56 grid-cols-7 items-end gap-3">
+            <ol className="mt-8 grid h-56 grid-cols-7 items-end gap-1.5 sm:gap-3">
               {report.daily.map((day) => (
-                <div key={day.date} className="flex h-full flex-col justify-end gap-2">
-                  <div className="flex min-h-0 flex-1 items-end gap-1">
+                <li
+                  key={day.date}
+                  className="flex h-full flex-col justify-end gap-2"
+                  aria-label={`${day.date}: ${day.sent} sent, ${day.clicks} clicks`}
+                >
+                  <div className="flex min-h-0 flex-1 items-end justify-center gap-1">
                     <div
-                      className="w-full bg-cyan-300/75"
+                      className="w-full max-w-5 rounded-t-md rounded-b-sm bg-accent"
                       style={{
-                        height: `${Math.max((day.sent / maxDaily) * 100, 4)}%`,
+                        height: `${Math.max((day.sent / maxDaily) * 100, 3)}%`,
                       }}
                       title={`${day.sent} sent`}
                     />
                     <div
-                      className="w-full bg-emerald-300/75"
+                      className="w-full max-w-5 rounded-t-md rounded-b-sm bg-muted/60"
                       style={{
-                        height: `${Math.max((day.clicks / maxDaily) * 100, 4)}%`,
+                        height: `${Math.max((day.clicks / maxDaily) * 100, 3)}%`,
                       }}
                       title={`${day.clicks} clicks`}
                     />
                   </div>
-                  <p className="truncate text-center text-[11px] text-zinc-500">
+                  <p className="whitespace-nowrap text-center text-[0.6875rem] text-faint sm:text-caption">
                     {day.date}
                   </p>
-                </div>
+                </li>
               ))}
-            </div>
-            <div className="mt-5 flex flex-wrap gap-4 text-xs text-zinc-400">
+            </ol>
+            <div className="mt-5 flex flex-wrap gap-4 text-footnote text-muted">
               <span className="inline-flex items-center gap-2">
-                <span className="h-2 w-2 bg-cyan-300" />
+                <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-accent" />
                 Sent replies
               </span>
               <span className="inline-flex items-center gap-2">
-                <span className="h-2 w-2 bg-emerald-300" />
+                <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-muted/60" />
                 Link clicks
               </span>
             </div>
           </section>
 
           <aside className="space-y-6">
-            <section className="border border-white/10 bg-white/[0.035] p-6">
-              <h2 className="text-xl font-black text-white">Top Keywords</h2>
-              <div className="mt-5 space-y-3">
+            <section aria-labelledby="report-keywords" className="panel p-5 sm:p-6">
+              <h2 id="report-keywords" className="text-title-3 font-semibold text-foreground">
+                Top keywords
+              </h2>
+              <div className="mt-4">
                 {report.topKeywords.length === 0 && (
-                  <p className="text-sm text-zinc-400">
-                    No matched keyword data yet.
-                  </p>
+                  <p className="text-sm text-muted">No matched keyword data yet.</p>
                 )}
-                {report.topKeywords.map((keyword) => (
+                {report.topKeywords.map((keyword, index) => (
                   <div
                     key={keyword.keyword}
-                    className="flex items-center justify-between gap-4 border-b border-white/10 pb-3 last:border-0 last:pb-0"
+                    className={`flex items-center justify-between gap-4 py-2.5 ${
+                      index > 0 ? "border-t border-border" : ""
+                    }`}
                   >
-                    <span className="text-sm font-semibold text-white">
-                      {keyword.keyword}
-                    </span>
-                    <span className="text-sm text-zinc-400">
-                      {keyword.count}
-                    </span>
+                    <span className="text-sm font-medium text-foreground">{keyword.keyword}</span>
+                    <span className="text-sm tabular-nums text-muted">{keyword.count}</span>
                   </div>
                 ))}
               </div>
             </section>
 
-            <section className="border border-white/10 bg-white/[0.035] p-6">
-              <h2 className="text-xl font-black text-white">Tracked Links</h2>
-              <div className="mt-5 space-y-3">
+            <section aria-labelledby="report-links" className="panel p-5 sm:p-6">
+              <h2 id="report-links" className="text-title-3 font-semibold text-foreground">
+                Tracked links
+              </h2>
+              <div className="mt-4">
                 {report.trackedLinks.length === 0 && (
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-muted">
                     This campaign does not have a tracked link.
                   </p>
                 )}
-                {report.trackedLinks.map((link) => (
+                {report.trackedLinks.map((link, index) => (
                   <div
                     key={link.slug}
-                    className="flex items-center justify-between gap-4"
+                    className={`flex items-center justify-between gap-4 py-2.5 ${
+                      index > 0 ? "border-t border-border" : ""
+                    }`}
                   >
-                    <span className="min-w-0 truncate text-sm text-zinc-300">
+                    <span className="min-w-0 truncate text-sm text-muted">
                       {link.destinationHost}
                     </span>
-                    <span className="text-sm font-semibold text-white">
+                    <span className="text-sm font-semibold tabular-nums text-foreground">
                       {link.clicks}
                     </span>
                   </div>
@@ -251,54 +254,52 @@ export default async function ReportPage({ params }: ReportPageProps) {
           </aside>
         </div>
 
-        <section className="mt-8 border border-white/10 bg-white/[0.035] p-6">
-          <h2 className="text-xl font-black text-white">Campaign Setup</h2>
-          <div className="mt-5 grid gap-5 md:grid-cols-3">
+        <section aria-labelledby="report-setup" className="panel p-5 sm:p-6">
+          <h2 id="report-setup" className="text-title-3 font-semibold text-foreground">
+            Campaign setup
+          </h2>
+          <dl className="mt-5 grid gap-6 md:grid-cols-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Keywords
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <dt className="text-caption text-faint">Keywords</dt>
+              <dd className="mt-2 flex flex-wrap gap-1.5">
                 {report.campaign.keywords.map((keyword) => (
                   <span
                     key={keyword}
-                    className="border border-white/10 bg-zinc-950 px-2 py-1 text-xs font-semibold text-zinc-300"
+                    className="rounded-full bg-fill-strong px-2.5 py-1 text-footnote font-medium text-foreground"
                   >
                     {keyword}
                   </span>
                 ))}
-              </div>
+              </dd>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Created
-              </p>
-              <p className="mt-3 text-sm text-zinc-300">
+              <dt className="text-caption text-faint">Created</dt>
+              <dd className="mt-2 text-sm text-foreground">
                 {formatDate(report.campaign.createdAt)}
-              </p>
+              </dd>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Source post
-              </p>
-              {report.campaign.postUrl ? (
-                <a
-                  href={report.campaign.postUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-3 inline-flex text-sm font-semibold text-cyan-200 transition hover:text-cyan-100"
-                >
-                  View Instagram post
-                </a>
-              ) : (
-                <p className="mt-3 text-sm text-zinc-400">Not attached</p>
-              )}
+              <dt className="text-caption text-faint">Source post</dt>
+              <dd className="mt-2">
+                {report.campaign.postUrl ? (
+                  <a
+                    href={report.campaign.postUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm font-semibold text-accent hover:underline"
+                  >
+                    View Instagram post
+                  </a>
+                ) : (
+                  <span className="text-sm text-muted">Not attached</span>
+                )}
+              </dd>
             </div>
-          </div>
+          </dl>
         </section>
 
         {report.branded && (
-          <footer className="mt-8 border-t border-white/10 pt-6 text-center text-xs text-zinc-500">
+          <footer className="pt-6 text-center text-caption text-faint">
             Built with OpenSetter, the Instagram comment-to-DM campaign OS.
           </footer>
         )}

@@ -161,12 +161,12 @@ export function FileChip({
       target="_blank"
       rel="noopener noreferrer"
       className={`flex w-64 max-w-full items-center gap-3 rounded-2xl px-3 py-2.5 ${PRESS} ${
-        fromMe ? "bg-accent text-white hover:bg-accent-hover" : "border border-border bg-surface hover:bg-surface-hover"
+        fromMe ? "bg-accent text-white hover:bg-accent-hover" : "bg-fill-strong hover:bg-fill"
       }`}
     >
       <span
         className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-          fromMe ? "bg-white/20" : "bg-surface-hover text-muted"
+          fromMe ? "bg-white/20" : "bg-surface text-muted"
         }`}
       >
         <FileIcon size={18} />
@@ -200,7 +200,7 @@ export function LinkPreview({
     <>
       <span
         className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-          fromMe ? "bg-white/20" : "bg-surface-hover text-muted"
+          fromMe ? "bg-white/20" : "bg-surface text-muted"
         }`}
       >
         <Icon size={18} />
@@ -217,7 +217,7 @@ export function LinkPreview({
     </>
   );
   const base = `flex w-64 max-w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left ${
-    fromMe ? "bg-accent text-white" : "border border-border bg-surface text-foreground"
+    fromMe ? "bg-accent text-white" : "bg-fill-strong text-foreground"
   }`;
   if (!href) return <div className={base}>{body}</div>;
   return (
@@ -225,7 +225,7 @@ export function LinkPreview({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`${base} ${PRESS} ${fromMe ? "hover:bg-accent-hover" : "hover:bg-surface-hover"}`}
+      className={`${base} ${PRESS} ${fromMe ? "hover:bg-accent-hover" : "hover:bg-fill"}`}
     >
       {body}
     </a>

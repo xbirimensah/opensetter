@@ -20,7 +20,7 @@ const TONE_CLASSES: Record<CliReadinessTone, string> = {
   success: "bg-success/15 text-success",
   warning: "bg-warning/15 text-warning",
   error: "bg-error/15 text-error",
-  neutral: "bg-surface-hover text-muted",
+  neutral: "bg-fill-strong text-muted",
 };
 
 const CUSTOM = "__custom__";
@@ -34,7 +34,7 @@ const MODEL_SOURCE_NOTE: Record<CliProviderStatus["provider"], string> = {
 export function CliReadinessBadge({ status }: { status: CliProviderStatus }) {
   const readiness = describeCliReadiness(status);
   return (
-    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${TONE_CLASSES[readiness.tone]}`}>
+    <span className={`shrink-0 rounded-full px-2.5 py-1 text-caption font-medium ${TONE_CLASSES[readiness.tone]}`}>
       {readiness.label}
     </span>
   );
@@ -102,11 +102,11 @@ export function CliModelPicker({
         </label>
       )}
       {invalid && (
-        <p className="mt-1 text-xs text-error">
+        <p className="mt-1 text-footnote text-error">
           Use letters, digits and . _ : / @ [ ] - only, starting with a letter or digit.
         </p>
       )}
-      <span className="mt-1 block text-xs text-muted">
+      <span className="mt-1 block text-footnote text-muted">
         {status.models.length > 0
           ? MODEL_SOURCE_NOTE[status.provider]
           : "This CLI reported no models; the CLI default or a custom id still works."}{" "}
@@ -129,25 +129,25 @@ export function CliStatusList({
   return (
     <section className="min-w-0" aria-labelledby="cli-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="cli-heading" className={LABEL_CLASS}>
+        <h2 id="cli-heading" className="section-title">
           Local CLIs (this server, no API key)
         </h2>
         <button
           type="button"
           onClick={onRefresh}
           disabled={refreshing}
-          className="min-h-11 rounded-lg px-3 text-xs text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-50 sm:min-h-0 sm:py-1"
+          className="btn btn-quiet btn-sm"
         >
           {refreshing ? "Checking…" : "Check again"}
         </button>
       </div>
       <ul className="mt-2 space-y-2">
         {statuses.map((status) => (
-          <li key={status.provider} className="rounded-xl border border-border bg-surface p-4">
+          <li key={status.provider} className="panel p-4 sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">{status.label}</p>
-                <p className="mt-0.5 break-words text-xs text-muted">
+                <p className="mt-0.5 break-words text-footnote text-muted">
                   {[
                     status.version,
                     status.auth.state === "ready" ? status.auth.detail : null,
@@ -161,11 +161,11 @@ export function CliStatusList({
               </div>
               <CliReadinessBadge status={status} />
             </div>
-            {status.problem && <p className="mt-2 break-words text-xs text-warning">{status.problem}</p>}
+            {status.problem && <p className="mt-2 break-words text-footnote text-warning">{status.problem}</p>}
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-xs text-faint">
+      <p className="mt-2 text-footnote text-faint">
         Runs under the server user&apos;s own CLI login and subscription.
         {checkedAt ? ` Checked ${formatDateTime(checkedAt)}.` : ""}
       </p>

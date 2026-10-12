@@ -137,11 +137,11 @@ export default function VoiceCorrectionsCard({ accountId }: { accountId: string 
   const hasContent = Boolean(avoidText.trim() || preferText.trim() || note.trim());
 
   return (
-    <section className="rounded-xl border border-border bg-surface p-4" aria-labelledby="corrections-heading">
-      <h2 id="corrections-heading" className="text-sm font-semibold text-foreground">
+    <section className="panel p-4 sm:p-5" aria-labelledby="corrections-heading">
+      <h2 id="corrections-heading" className="section-title">
         Corrections per contact
       </h2>
-      <p className="mt-1 text-xs text-muted">
+      <p className="mt-1 text-footnote text-muted">
         Teach the setter how you talk with one specific person. A correction
         only affects drafts for that contact. Edits you make before approving
         a held draft are added here automatically.
@@ -200,7 +200,7 @@ export default function VoiceCorrectionsCard({ accountId }: { accountId: string 
               type="button"
               onClick={() => void addCorrection()}
               disabled={saving || !hasContent}
-              className="min-h-11 w-full rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50 sm:min-h-0 sm:w-auto"
+              className="btn btn-primary w-full sm:w-auto"
             >
               {saving ? "Saving…" : "Add correction"}
             </button>
@@ -212,15 +212,15 @@ export default function VoiceCorrectionsCard({ accountId }: { accountId: string 
 
       <ul className="mt-4 space-y-2">
         {visible.length === 0 ? (
-          <li className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-sm text-muted">
+          <li className="rounded-xl bg-fill px-3 py-4 text-center text-sm text-muted">
             No corrections yet.
           </li>
         ) : (
           visible.map((item) => (
-            <li key={item.id} className="rounded-lg border border-border bg-background px-3 py-2">
+            <li key={item.id} className="rounded-xl bg-fill px-3 py-2.5">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 text-sm">
-                  <p className="text-xs text-faint">
+                  <p className="text-footnote text-faint">
                     {contactName(item.conversation)} ·{" "}
                     {item.kind === "EDIT" ? "from an edited draft" : "added by hand"} ·{" "}
                     {formatDateTime(item.createdAt)}
@@ -233,13 +233,13 @@ export default function VoiceCorrectionsCard({ accountId }: { accountId: string 
                   {item.preferText && (
                     <p className="mt-0.5 break-words text-foreground">{item.preferText}</p>
                   )}
-                  {item.note && <p className="mt-0.5 break-words text-xs text-muted">{item.note}</p>}
+                  {item.note && <p className="mt-0.5 break-words text-footnote text-muted">{item.note}</p>}
                 </div>
                 <button
                   type="button"
                   onClick={() => void removeCorrection(item.id)}
                   aria-label="Remove correction"
-                  className="-mr-1 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded text-xs text-muted hover:text-error sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1"
+                  className="btn btn-quiet btn-sm -mr-1 shrink-0 hover:text-error"
                 >
                   Remove
                 </button>

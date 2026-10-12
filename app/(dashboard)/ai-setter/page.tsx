@@ -221,99 +221,123 @@ export default function AiSetterPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="hidden text-lg font-semibold text-foreground sm:block">
-            AI Setter
-          </h1>
-          <p className="text-sm text-muted sm:mt-1">
-            An AI that answers your DMs in your voice, qualifies prospects,
-            and books the right ones.
-          </p>
-        </div>
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-xl text-sm text-muted">
+          An AI that answers your DMs in your voice, qualifies prospects,
+          and books the right ones.
+        </p>
         {accounts.length > 1 && (
           <AccountSelect
             accounts={accounts}
             value={selectedAccountId}
             onChange={setSelectedAccountId}
             includeAll={false}
+            hideLabel
           />
         )}
       </div>
 
-      {/* Mode selector */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        {MODES.map((mode) => {
-          const isActive = form.mode === mode.value;
-          return (
-            <button
-              key={mode.value}
-              type="button"
-              onClick={() => update("mode", mode.value)}
-              aria-pressed={isActive}
-              className={`min-h-11 min-w-0 rounded-xl border px-3 py-2.5 text-left transition-colors sm:px-4 sm:py-3 ${
-                isActive
-                  ? "border-accent/60 bg-accent/10"
-                  : "border-border bg-surface hover:border-border-hover"
-              }`}
-            >
-              <span
-                className={`block text-sm font-medium ${
-                  isActive ? "text-accent" : "text-foreground"
+      {/* Mode: the one decision that changes what the setter does. */}
+      <section aria-labelledby="setter-mode">
+        <div className="mb-2.5 flex items-baseline justify-between gap-3 px-1">
+          <h2 id="setter-mode" className="section-title">
+            Mode
+          </h2>
+          <p className="hidden text-caption text-faint sm:block">Changes apply after saving</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          {MODES.map((mode) => {
+            const isActive = form.mode === mode.value;
+            return (
+              <button
+                key={mode.value}
+                type="button"
+                onClick={() => update("mode", mode.value)}
+                aria-pressed={isActive}
+                className={`press flex min-h-11 min-w-0 flex-col justify-start rounded-2xl border px-3 py-3 text-left sm:px-4 sm:py-4 ${
+                  isActive
+                    ? "border-accent bg-accent/10"
+                    : "border-border bg-surface hover:border-border-hover hover:bg-surface-hover"
                 }`}
               >
-                {mode.label}
-              </span>
-              <span className="mt-1 hidden text-xs text-muted sm:block">
-                {mode.description}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="-mt-3 text-xs text-muted sm:hidden">
-        {MODES.find((mode) => mode.value === form.mode)?.description}{" "}
-        Changes apply after saving.
-      </p>
-
-      {/* Tabs scroll sideways on narrow screens instead of wrapping. */}
-      <div
-        role="tablist"
-        aria-label="AI Setter sections"
-        className="-mx-4 flex gap-1 overflow-x-auto border-b border-border px-4 lg:mx-0 lg:px-0"
-      >
-        {TABS.map((item) => {
-          const isActive = tab === item.value;
-          return (
-            <button
-              key={item.value}
-              type="button"
-              role="tab"
-              id={`tab-${item.value}`}
-              aria-selected={isActive}
-              aria-controls={`panel-${item.value}`}
-              onClick={() => setTab(item.value)}
-              className={`-mb-px min-h-11 shrink-0 border-b-2 px-3 text-sm ${
-                isActive
-                  ? "border-accent font-medium text-foreground"
-                  : "border-transparent text-muted hover:text-foreground"
-              }`}
-            >
-              {item.label}
-              {item.value === "setup" && held.length > 0 && (
-                <span className="ml-1.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning">
-                  {held.length}
+                <span className="flex items-center justify-between gap-2">
+                  <span
+                    className={`block text-headline font-semibold ${
+                      isActive ? "text-foreground" : "text-muted"
+                    }`}
+                  >
+                    {mode.label}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className={`hidden h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-[1.5px] sm:inline-flex ${
+                      isActive ? "border-accent bg-accent" : "border-border-hover"
+                    }`}
+                  >
+                    {isActive && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                  </span>
                 </span>
-              )}
-            </button>
-          );
-        })}
+                <span className="mt-1 hidden text-footnote leading-snug text-muted sm:block">
+                  {mode.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 px-1 text-footnote text-muted sm:hidden">
+          {MODES.find((mode) => mode.value === form.mode)?.description}{" "}
+          Changes apply after saving.
+        </p>
+      </section>
+
+      {/* Segmented control; scrolls sideways on narrow screens instead of wrapping. */}
+      <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] lg:mx-0 lg:px-0">
+        <div
+          role="tablist"
+          aria-label="AI Setter sections"
+          className="inline-flex gap-0.5 rounded-full bg-fill p-1"
+        >
+          {TABS.map((item) => {
+            const isActive = tab === item.value;
+            return (
+              <button
+                key={item.value}
+                type="button"
+                role="tab"
+                id={`tab-${item.value}`}
+                aria-selected={isActive}
+                aria-controls={`panel-${item.value}`}
+                onClick={() => setTab(item.value)}
+                className={`press inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm ${
+                  isActive
+                    ? "bg-segment font-semibold text-foreground shadow-[0_1px_3px_rgb(0_0_0/0.18)]"
+                    : "font-medium text-muted hover:text-foreground"
+                }`}
+              >
+                {item.label}
+                {item.value === "setup" && held.length > 0 && (
+                  <span className="rounded-full bg-warning/15 px-1.5 py-px text-caption font-semibold tabular-nums text-warning">
+                    {held.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {configLoading ? (
-          <p className="text-sm text-muted">Loading configuration…</p>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]" aria-busy="true">
+            <div className="space-y-4">
+              <div className="skeleton h-4 w-28" />
+              <div className="panel h-28" />
+              <div className="panel h-16" />
+              <div className="panel h-48" />
+            </div>
+            <div className="panel h-64" />
+          </div>
         ) : tab === "setup" ? (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)]">
             {/* On phones the review queue comes first: it is what needs a thumb. */}

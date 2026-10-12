@@ -164,7 +164,7 @@ export default function VoiceNote({ src, seed, fromMe }: VoiceNoteProps) {
     return (
       <div
         className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-sm ${
-          fromMe ? "bg-accent/15 text-foreground" : "border border-border bg-surface text-muted"
+          fromMe ? "bg-accent/15 text-foreground" : "bg-fill-strong text-muted"
         }`}
       >
         <MicIcon />
@@ -182,7 +182,7 @@ export default function VoiceNote({ src, seed, fromMe }: VoiceNoteProps) {
   return (
     <div
       className={`flex w-[15.5rem] max-w-full items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-2 ${
-        fromMe ? "bg-accent text-white" : "border border-border bg-surface text-foreground"
+        fromMe ? "bg-accent text-white" : "bg-fill-strong text-foreground"
       }`}
     >
       <audio
