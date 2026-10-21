@@ -1,0 +1,139 @@
+---
+/* The example flow from the hero, seen from the editor: a trigger card and
+   the steps it runs, wired with connectors that a light pulse travels
+   along (Aceternity "animated beam"). */
+
+const nodes = [
+  { type: "Message", title: "Private reply", detail: "Button: Yes, send it", icon: "msg" },
+  { type: "Input", title: "Ask for an email", detail: "Saves to Email, retries if invalid", icon: "input" },
+  { type: "Message", title: "Send the guide", detail: "Tracked link button", icon: "link" },
+  { type: "AI handoff", title: "Hand to the AI setter", detail: "Ends the flow, AI answers next", icon: "ai" },
+];
+---
+<figure class="flow-canvas card bg-dots relative overflow-hidden px-4 py-8 sm:px-10 sm:py-12" data-flow>
+  <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_60%_at_50%_0%,rgb(166_16_223/0.12),transparent)]" aria-hidden="true"></div>
+  <div class="relative mx-auto max-w-sm">
+    <div class="flow-node flow-node-trigger" data-flow-node>
+      <p class="t-label !text-accent-text">When</p>
+      <p class="t-sub mt-1">Someone comments on a reel</p>
+      <p class="mt-2 flex flex-wrap items-center gap-1.5 text-[0.8125rem] text-muted">
+        Keyword <span class="chip chip-accent">MATRIX</span>
+      </p>
+    </div>
+    {nodes.map((node) => (
+      <Fragment>
+        <svg class="mx-auto block h-10 w-4 overflow-visible" viewBox="0 0 16 40" aria-hidden="true">
+          <path class="flow-wire" d="M8 0 V40" />
+          <path class="flow-beam" d="M8 0 V40" pathLength="100" />
+          <circle cx="8" cy="40" r="2.5" class="fill-border-hover" />
+        </svg>
+        <div class="flow-node" data-flow-node>
+          <div class="flex items-start gap-3">
+            <span class="flow-icon" aria-hidden="true">
+              {node.icon === "msg" && <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4.5a2 2 0 012-2h7a2 2 0 012 2v5a2 2 0 01-2 2H7l-3 2.5v-2.5h0a2 2 0 01-1.5-2z"/></svg>}
+              {node.icon === "input" && <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="8" rx="2"/><path d="M5 8h3"/></svg>}
+              {node.icon === "link" && <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 9l2-2M6 5.5l1-1a2.5 2.5 0 013.5 3.5l-1 1M10 10.5l-1 1A2.5 2.5 0 015.5 8l1-1"/></svg>}
+              {node.icon === "ai" && <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5l1.6 4.4 4.4 1.6-4.4 1.6L8 13.5 6.4 9.1 2 7.5l4.4-1.6z"/></svg>}
+            </span>
+            <div class="min-w-0">
+              <p class="t-label">{node.type}</p>
+              <p class="t-sub mt-1">{node.title}</p>
+              <p class="mt-1 text-[0.8125rem] leading-5 text-muted">{node.detail}</p>
+            </div>
+          </div>
+        </div>
+      </Fragment>
+    ))}
+  </div>
+  <figcaption class="sr-only">
+    The example flow in the editor: a comment trigger on the keyword MATRIX, then a private reply,
+    an email input, a message with the tracked link, and a hand-off to the AI setter.
+  </figcaption>
+</figure>
+
+<style>
+  .flow-node {
+    position: relative;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: rgb(17 17 17 / 0.92);
+    padding: 1rem 1.1rem;
+    box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.8);
+    transition:
+      border-color 400ms var(--ease-spring),
+      box-shadow 400ms var(--ease-spring);
+  }
+  .flow-node-trigger {
+    border-color: var(--color-accent-border);
+    background: linear-gradient(180deg, #1a0d21, #111);
+  }
+  .flow-node[data-lit] {
+    border-color: #7c2fa3;
+    box-shadow:
+      0 0 0 1px rgb(201 95 242 / 0.25),
+      0 0 32px -6px rgb(166 16 223 / 0.55);
+  }
+  .flow-icon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.6rem;
+    background: rgb(255 255 255 / 0.05);
+    border: 1px solid var(--color-border);
+    color: var(--color-accent-text);
+  }
+  .flow-icon svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  .flow-wire {
+    stroke: var(--color-border-hover);
+    stroke-width: 1.5;
+    fill: none;
+  }
+  .flow-beam {
+    stroke: #e5b3fa;
+    stroke-width: 2;
+    stroke-linecap: round;
+    fill: none;
+    stroke-dasharray: 26 200;
+    stroke-dashoffset: 26;
+    filter: drop-shadow(0 0 4px #c95ff2);
+    opacity: 0;
+  }
+</style>
+
+<script>
+  import { animate, createTimeline, stagger, svg } from "animejs";
+  import { onceVisible, prefersReducedMotion } from "../scripts/motion";
+
+  document.querySelectorAll<HTMLElement>("[data-flow]").forEach((root) => {
+    if (prefersReducedMotion()) return;
+    const wires = [...root.querySelectorAll<SVGPathElement>(".flow-wire")];
+    const beams = [...root.querySelectorAll<SVGPathElement>(".flow-beam")];
+    const nodes = [...root.querySelectorAll<HTMLElement>("[data-flow-node]")];
+
+    // Wires start undrawn and draw in once, top to bottom.
+    const drawables = svg.createDrawable(wires, 0, 0);
+
+    onceVisible(root, () => {
+      animate(drawables, { draw: ["0 0", "0 1"], duration: 500, delay: stagger(160, { start: 200 }), ease: "inOutQuad" });
+
+      // Then a pulse runs down the wires forever, lighting each node it
+      // reaches, like a contact moving through the flow.
+      const tl = createTimeline({ loop: true, loopDelay: 1400, delay: 1100 });
+      nodes.forEach((node, i) => {
+        tl.call(() => {
+          nodes.forEach((n) => n.toggleAttribute("data-lit", n === node));
+        });
+        const beam = beams[i];
+        if (beam) {
+          tl.add(beam, { strokeDashoffset: [26, -100], opacity: [{ to: 1, duration: 80 }, { to: 1, duration: 520 }, { to: 0, duration: 100 }], duration: 700, ease: "inOutSine" }, "+=520");
+        }
+      });
+      tl.call(() => nodes.forEach((n) => n.removeAttribute("data-lit")), "+=900");
+    }, 0.25);
+  });
+</script>

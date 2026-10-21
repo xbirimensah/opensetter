@@ -1,0 +1,35 @@
+---
+import GitHubMark from "./GitHubMark.astro";
+import { FOOTER_GROUPS, GITHUB_URL } from "../lib/links";
+---
+<footer class="border-t border-border">
+  <div class="container-site grid gap-10 py-14 sm:py-16 lg:grid-cols-[1.2fr_2fr]">
+    <div>
+      <a href="#top" class="flex items-center gap-2 text-[1.0625rem] font-semibold tracking-[-0.02em]">
+        <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" width="24" height="24" class="h-6 w-6" />
+        OpenSetter
+      </a>
+      <p class="mt-3 max-w-xs text-sm leading-6 text-muted">
+        Open source Instagram comment-to-DM automation with an AI setter.
+      </p>
+      <a href={GITHUB_URL} target="_blank" rel="noreferrer" class="mt-4 inline-flex min-h-11 items-center gap-2 text-sm text-muted hover:text-white">
+        <GitHubMark />
+        View on GitHub
+      </a>
+    </div>
+    <div class="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3">
+      {FOOTER_GROUPS.map((group) => (
+        <nav aria-label={group.title}>
+          <h2 class="t-label">{group.title}</h2>
+          <ul class="mt-3">
+            {group.links.map((link) => (
+              <li>
+                <a href={link.href} class="inline-flex min-h-10 items-center text-sm text-muted transition-colors hover:text-white">{link.label}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ))}
+    </div>
+  </div>
+</footer>

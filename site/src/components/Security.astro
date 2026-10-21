@@ -1,0 +1,23 @@
+---
+/* Facts that hold for every install, each one backed by the code or the
+   legal pages: no performance claims. */
+const facts = [
+  { title: "Official Instagram API", body: "No scraping, no passwords, no browser automation.", icon: "M8 1.5l5 2v4c0 3.2-2.2 5.8-5 7-2.8-1.2-5-3.8-5-7v-4z" },
+  { title: "Encrypted tokens", body: "Instagram access tokens are encrypted at rest.", icon: "M4.5 7V5a3.5 3.5 0 017 0v2M3.5 7h9v6.5h-9z" },
+  { title: "Nothing slips through", body: "Webhooks catch comments live. A polling sweep catches the rest.", icon: "M2 8a6 6 0 0110.5-4M14 8a6 6 0 01-10.5 4M12.5 1.5V4H10M3.5 14.5V12H6" },
+  { title: "One reply per comment", body: "Deduplicated, so nobody gets the same private reply twice.", icon: "M3.5 8.5l3 3 6-7" },
+  { title: "Queued and rate-limited", body: "Every send waits its turn per account and is logged.", icon: "M2.5 4h11M2.5 8h11M2.5 12h7" },
+  { title: "Yours to run", body: "Self-hosted, MIT licensed, no plan limits.", icon: "M8 2.5v7M5 6.5l3 3 3-3M3 12.5h10" },
+];
+---
+<ul class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  {facts.map((f) => (
+    <li class="card glow p-5" data-reveal>
+      <span class="grid h-10 w-10 place-items-center rounded-xl border border-accent-border bg-accent-subtle text-accent-text" aria-hidden="true">
+        <svg viewBox="0 0 16 16" class="h-[1.125rem] w-[1.125rem]" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d={f.icon} /></svg>
+      </span>
+      <h3 class="t-sub mt-4">{f.title}</h3>
+      <p class="t-body mt-1">{f.body}</p>
+    </li>
+  ))}
+</ul>

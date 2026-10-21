@@ -1,0 +1,67 @@
+---
+import GitHubMark from "./GitHubMark.astro";
+import { GITHUB_URL, appHref } from "../lib/links";
+---
+<section class="container-site pb-24 sm:pb-32">
+  <div class="cta card relative isolate overflow-hidden px-6 pb-14 pt-24 text-center sm:px-12 sm:pb-20 sm:pt-32" data-reveal>
+    <!-- Aceternity "lamp": a light bar with two conic beams opening down. -->
+    <div class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-64" aria-hidden="true">
+      <div class="lamp-beam lamp-left"></div>
+      <div class="lamp-beam lamp-right"></div>
+      <div class="absolute left-1/2 top-0 h-36 w-[28rem] max-w-[80%] -translate-x-1/2 rounded-full bg-accent/40 blur-3xl"></div>
+      <div class="lamp-bar absolute left-1/2 top-0 h-px w-[22rem] max-w-[70%] -translate-x-1/2 bg-[#e5b3fa]" data-lamp></div>
+    </div>
+    <div class="bg-dots mask-radial pointer-events-none absolute inset-0 -z-20 opacity-60" aria-hidden="true"></div>
+    <h2 class="t-title text-sheen mx-auto max-w-2xl">Turn your next reel’s comments into conversations.</h2>
+    <p class="t-lead mx-auto mt-4 max-w-xl">Free and open source. Star it if it saves you a subscription.</p>
+    <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+      <a href={appHref("/login")} class="btn btn-primary btn-lg btn-orbit w-full sm:w-auto">Get started</a>
+      <a href={GITHUB_URL} class="btn btn-secondary btn-lg w-full sm:w-auto"><GitHubMark /> View on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .lamp-beam {
+    position: absolute;
+    top: 0;
+    width: 50%;
+    height: 100%;
+    max-width: 24rem;
+    opacity: 0.55;
+  }
+  .lamp-left {
+    right: 50%;
+    transform-origin: right top;
+    background: conic-gradient(from 70deg at 100% 0%, #a610df, transparent 30%);
+    -webkit-mask: linear-gradient(to bottom, #000, transparent 85%);
+    mask: linear-gradient(to bottom, #000, transparent 85%);
+  }
+  .lamp-right {
+    left: 50%;
+    transform-origin: left top;
+    background: conic-gradient(from 290deg at 0% 0%, transparent 70%, #a610df);
+    -webkit-mask: linear-gradient(to bottom, #000, transparent 85%);
+    mask: linear-gradient(to bottom, #000, transparent 85%);
+  }
+  .lamp-bar {
+    box-shadow: 0 0 24px 4px rgb(201 95 242 / 0.7);
+  }
+</style>
+
+<script>
+  import { animate } from "animejs";
+  import { onceVisible, prefersReducedMotion } from "../scripts/motion";
+
+  // The lamp switches on: the bar widens and the beams open.
+  const lamp = document.querySelector<HTMLElement>("[data-lamp]");
+  const beams = document.querySelectorAll<HTMLElement>(".lamp-beam");
+  if (lamp && !prefersReducedMotion()) {
+    lamp.style.width = "8rem";
+    beams.forEach((b) => (b.style.opacity = "0"));
+    onceVisible(lamp.closest(".cta")!, () => {
+      animate(lamp, { width: ["8rem", "22rem"], duration: 1100, ease: "outExpo", delay: 200 });
+      animate(beams, { opacity: [0, 0.55], scaleX: [0.5, 1], duration: 1300, ease: "outExpo", delay: 250 });
+    }, 0.4);
+  }
+</script>

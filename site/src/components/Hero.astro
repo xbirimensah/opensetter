@@ -1,0 +1,107 @@
+---
+import GitHubMark from "./GitHubMark.astro";
+import { GITHUB_URL, appHref } from "../lib/links";
+---
+<section id="top" class="relative isolate overflow-hidden pb-10 pt-16 sm:pb-16 sm:pt-28">
+  <!-- Backdrop: masked grid, a spotlight cone (Aceternity "Spotlight")
+       and a low purple horizon. All decorative. -->
+  <div class="pointer-events-none absolute inset-0 -z-10 [mask-image:linear-gradient(to_bottom,#000_65%,transparent)]" aria-hidden="true">
+    <div class="bg-grid mask-radial absolute inset-0"></div>
+    <svg
+      class="hero-spotlight absolute -left-[10%] -top-[20%] h-[160%] w-[140%] sm:-left-[5%] sm:w-[90%]"
+      viewBox="0 0 3787 2842"
+      fill="none"
+      data-spotlight
+    >
+      <g filter="url(#spot-blur)">
+        <ellipse cx="1924.71" cy="273.501" rx="1924.71" ry="273.501" transform="matrix(-0.822377 -0.568943 -0.568943 0.822377 3631.88 2291.09)" fill="#C95FF2" fill-opacity="0.16"></ellipse>
+      </g>
+      <defs>
+        <filter id="spot-blur" x="0.86" y="0.84" width="3785.16" height="2840.26" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+          <feGaussianBlur stdDeviation="151" />
+        </filter>
+      </defs>
+    </svg>
+    <div class="absolute inset-x-0 bottom-0 h-[40%] bg-[radial-gradient(60%_80%_at_50%_100%,rgb(166_16_223/0.18),transparent_70%)]"></div>
+  </div>
+
+  <div class="container-site text-center">
+    <a
+      href="#how"
+      class="hero-badge group mx-auto inline-flex min-h-9 items-center gap-2 rounded-full border border-border bg-white/[0.03] py-1 pl-1.5 pr-3.5 text-[0.8125rem] text-muted transition-colors hover:border-border-hover hover:text-white"
+      data-reveal
+    >
+      <span class="rounded-full bg-accent-subtle px-2 py-0.5 text-[0.6875rem] font-semibold text-accent-text">Open source</span>
+      Self-hosted · Official Instagram API
+      <svg viewBox="0 0 12 12" class="h-3 w-3 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" /></svg>
+    </a>
+
+    <h1 class="t-display mx-auto mt-6 max-w-4xl" data-headline>
+      <span class="text-sheen">ManyChat and an AI setter</span>{" "}<span class="text-accent-sheen">in one.</span>
+    </h1>
+
+    <p class="t-lead mx-auto mt-6 max-w-xl" data-reveal>
+      Comment-to-DM flows, plus an AI that answers in your voice when people reply.
+    </p>
+
+    <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal>
+      <a href={appHref("/login")} class="btn btn-primary btn-lg btn-orbit w-full sm:w-auto">Get started</a>
+      <a href={GITHUB_URL} class="btn btn-secondary btn-lg w-full sm:w-auto">
+        <GitHubMark />
+        View on GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero-spotlight {
+    opacity: 0;
+    animation: spotlight 2.2s var(--ease-spring) 0.25s forwards;
+  }
+  @keyframes spotlight {
+    from {
+      opacity: 0;
+      transform: translate(-12%, -18%) scale(0.6);
+    }
+    to {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero-spotlight {
+      animation: none;
+      opacity: 1;
+    }
+  }
+</style>
+
+<script>
+  import { animate, splitText, stagger } from "animejs";
+
+  // Aceternity "text generate": the headline arrives word by word, each
+  // one sharpening out of a blur.
+  if (document.documentElement.classList.contains("js-motion")) {
+    const headline = document.querySelector<HTMLElement>("[data-headline]");
+    if (headline) {
+      const targets: HTMLElement[] = [];
+      headline.querySelectorAll<HTMLElement>(":scope > span").forEach((part) => {
+        // background-clip: text does not reach transformed children, so
+        // the gradient moves from the phrase onto each word.
+        const sheen = part.className;
+        const { words } = splitText(part, { words: { class: sheen } });
+        part.className = "";
+        targets.push(...(words as HTMLElement[]));
+      });
+      animate(targets, {
+        opacity: [0, 1],
+        filter: ["blur(12px)", "blur(0px)"],
+        translateY: ["0.35em", "0em"],
+        duration: 900,
+        delay: stagger(70, { start: 120 }),
+        ease: "outExpo",
+      });
+    }
+  }
+</script>

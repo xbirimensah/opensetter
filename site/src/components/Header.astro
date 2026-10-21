@@ -1,0 +1,137 @@
+---
+import GitHubMark from "./GitHubMark.astro";
+import { GITHUB_URL, SITE_NAV, appHref, formatStars } from "../lib/links";
+
+interface Props {
+  stars: number | null;
+}
+
+const { stars } = Astro.props;
+---
+<header class="site-header" data-header>
+  <div class="container-site flex h-full items-center gap-6">
+    <a href="#top" class="flex items-center gap-2 text-[1.0625rem] font-semibold tracking-[-0.02em]" aria-label="OpenSetter home">
+      <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" width="24" height="24" class="h-6 w-6" />
+      OpenSetter
+    </a>
+
+    <nav aria-label="Main" class="hidden lg:block">
+      <ul class="flex items-center gap-0.5">
+        {SITE_NAV.map((link) => (
+          <li><a href={link.href} class="navlink">{link.label}</a></li>
+        ))}
+      </ul>
+    </nav>
+
+    <div class="ml-auto flex items-center gap-1 sm:gap-2">
+      <a
+        href={GITHUB_URL}
+        target="_blank"
+        rel="noreferrer"
+        class="navlink hidden gap-2 sm:inline-flex"
+        aria-label={stars !== null ? `OpenSetter on GitHub, ${formatStars(stars)} stars` : "OpenSetter on GitHub"}
+      >
+        <GitHubMark />
+        {stars !== null && <span class="tabular-nums" aria-hidden="true">{formatStars(stars)}</span>}
+      </a>
+      <a href={appHref("/login")} class="navlink hidden lg:inline-flex">Sign in</a>
+      <button
+        type="button"
+        class="navlink lg:hidden"
+        popovertarget="site-menu"
+        aria-label="Menu"
+      >
+        <svg viewBox="0 0 20 20" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3.5 7h13M3.5 13h13" /></svg>
+      </button>
+      <a href={appHref("/login")} class="btn btn-primary btn-sm ml-1">Get started</a>
+    </div>
+  </div>
+
+  <!-- Native popover: light dismiss, Escape and focus return for free. -->
+  <div id="site-menu" popover class="site-menu">
+    <nav aria-label="Menu">
+      <ul class="flex flex-col">
+        {SITE_NAV.map((link) => (
+          <li><a href={link.href} class="menu-link" data-close-menu>{link.label}</a></li>
+        ))}
+        <li class="mt-2 border-t border-border pt-2">
+          <a href={GITHUB_URL} class="menu-link gap-2" target="_blank" rel="noreferrer"><GitHubMark /> GitHub</a>
+        </li>
+        <li><a href={appHref("/login")} class="menu-link">Sign in</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .site-menu {
+    position: fixed;
+    inset: auto;
+    top: calc(var(--header-h) + env(safe-area-inset-top) + 0.5rem);
+    right: max(var(--gutter), env(safe-area-inset-right));
+    width: min(17rem, calc(100vw - 2 * var(--gutter)));
+    margin: 0;
+    padding: 0.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+    background: var(--material-raised);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    color: #fff;
+    box-shadow: 0 24px 60px -12px rgb(0 0 0 / 0.8);
+    transform-origin: top right;
+    opacity: 0;
+    transform: scale(0.94);
+    filter: blur(6px);
+    transition:
+      opacity 260ms var(--ease-spring),
+      transform 360ms var(--ease-spring),
+      filter 260ms var(--ease-spring),
+      overlay 360ms allow-discrete,
+      display 360ms allow-discrete;
+  }
+  .site-menu:popover-open {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  @starting-style {
+    .site-menu:popover-open {
+      opacity: 0;
+      transform: scale(0.94);
+      filter: blur(6px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .site-menu,
+    .site-menu:popover-open {
+      transform: none;
+      filter: none;
+    }
+  }
+  .menu-link {
+    display: flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding: 0 0.875rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9375rem;
+  }
+  .menu-link:active {
+    background: rgb(255 255 255 / 0.08);
+  }
+</style>
+
+<script>
+  // Hairline under the header once content scrolls beneath it, and close
+  // the menu when one of its section links is taken.
+  const header = document.querySelector<HTMLElement>("[data-header]");
+  const onScroll = () => header?.toggleAttribute("data-scrolled", window.scrollY > 4);
+  addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  const menu = document.getElementById("site-menu");
+  menu?.querySelectorAll("[data-close-menu]").forEach((link) =>
+    link.addEventListener("click", () => menu.hidePopover())
+  );
+</script>

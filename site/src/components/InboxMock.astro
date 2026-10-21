@@ -1,0 +1,93 @@
+---
+/* The inbox, drawn: a conversation list and one thread with the message
+   kinds Instagram sends (voice note, card, text). Example content. */
+const conversations = [
+  { initial: "M", handle: "maya.co", preview: "Voice message", active: true },
+  { initial: "J", handle: "jordan.home", preview: "Sent a photo", active: false },
+  { initial: "S", handle: "sam.fit", preview: "AI draft waiting for review", active: false, dot: true },
+  { initial: "R", handle: "riley.studio", preview: "Thanks, got it!", active: false },
+];
+const waveform = [6, 10, 16, 9, 14, 20, 12, 7, 15, 18, 11, 6, 13, 17, 9, 5, 11, 14, 8, 6, 12, 16, 9];
+---
+<figure class="card glow overflow-hidden md:grid md:grid-cols-[15rem_1fr]" data-inbox>
+  <ul class="hidden border-r border-border md:block" aria-label="Conversations">
+    {conversations.map((c) => (
+      <li class:list={["relative flex items-center gap-3 border-b border-border/70 px-4 py-3.5", c.active && "bg-white/[0.04]"]}>
+        {c.active && <span class="absolute inset-y-2 left-0 w-0.5 rounded-full bg-accent" aria-hidden="true"></span>}
+        <span class="avatar">{c.initial}</span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-[0.8125rem] font-semibold">{c.handle}</span>
+          <span class="block truncate text-[0.75rem] text-muted">{c.preview}</span>
+        </span>
+        {c.dot && <span class="h-2 w-2 rounded-full bg-warning" aria-hidden="true"></span>}
+      </li>
+    ))}
+  </ul>
+
+  <div class="flex min-h-[22rem] flex-col">
+    <div class="flex items-center gap-2.5 border-b border-border px-4 py-3">
+      <span class="avatar">M</span>
+      <span class="flex-1 text-[0.875rem] font-semibold">maya.co</span>
+      <span class="chip gap-1.5 text-[0.6875rem]">
+        <span class="relative flex h-1.5 w-1.5">
+          <span class="absolute inset-0 rounded-full bg-success" style="animation: pulse-ring 1.8s ease-out infinite"></span>
+          <span class="relative h-1.5 w-1.5 rounded-full bg-success"></span>
+        </span>
+        AI setter on
+      </span>
+    </div>
+    <div class="flex flex-1 flex-col justify-end gap-2 p-4">
+      <div class="bubble bubble-in flex items-center gap-2.5 py-2">
+        <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-black" aria-hidden="true">
+          <svg viewBox="0 0 12 12" class="ml-0.5 h-2.5 w-2.5 fill-current"><path d="M2 1.2v9.6c0 .5.5.8.9.5l7.4-4.8a.6.6 0 000-1L2.9.7C2.5.4 2 .7 2 1.2z" /></svg>
+        </span>
+        <span class="flex h-5 items-center gap-[2px]" aria-hidden="true" data-wave>
+          {waveform.map((h) => <span class="w-[2px] rounded-full bg-white/30" style={`height:${h}px`}></span>)}
+        </span>
+        <span class="text-[0.75rem] tabular-nums text-muted">0:14</span>
+        <span class="sr-only">Voice message, 14 seconds</span>
+      </div>
+      <p class="bubble-meta self-end">Flow: Matrix guide</p>
+      <div class="bubble bubble-out w-56 overflow-hidden p-0">
+        <div class="relative grid h-24 place-items-center overflow-hidden bg-[radial-gradient(100%_100%_at_30%_0%,#7c1fb3,#2a0b3d)]" aria-hidden="true">
+          <div class="bg-dots absolute inset-0 opacity-50"></div>
+          <p class="relative text-[1rem] font-bold tracking-[-0.02em]">Starter kit</p>
+        </div>
+        <div class="px-3 pb-3 pt-2.5">
+          <p class="font-semibold">Matrix starter kit</p>
+          <p class="text-white/80">Three lessons and a checklist</p>
+          <span class="dm-button">Open the kit</span>
+        </div>
+      </div>
+      <p class="bubble bubble-in">Got it. Can I start before the next session?</p>
+    </div>
+  </div>
+  <figcaption class="sr-only">
+    Example inbox: a voice message from the contact, a card with a button sent by a flow, and a text reply.
+  </figcaption>
+</figure>
+
+<script>
+  import { animate, stagger } from "animejs";
+  import { onceVisible, prefersReducedMotion } from "../scripts/motion";
+
+  // The voice note "plays": its waveform fills left to right, on a loop.
+  document.querySelectorAll<HTMLElement>("[data-wave]").forEach((wave) => {
+    const bars = [...wave.children] as HTMLElement[];
+    if (prefersReducedMotion()) {
+      bars.slice(0, 8).forEach((b) => (b.style.background = "#fff"));
+      return;
+    }
+    onceVisible(wave, () => {
+      animate(bars, {
+        backgroundColor: ["rgba(255,255,255,0.3)", "#ffffff"],
+        scaleY: [{ to: 1.35, duration: 160 }, { to: 1, duration: 260 }],
+        delay: stagger(140),
+        duration: 420,
+        loop: true,
+        loopDelay: 1800,
+        ease: "outQuad",
+      });
+    });
+  });
+</script>

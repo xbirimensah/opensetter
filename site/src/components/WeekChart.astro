@@ -1,0 +1,69 @@
+---
+/* Two small multiples on one shared scale, so the bars compare honestly:
+   DMs sent and link clicks per day. Illustrative values only, and the
+   chart says so. */
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const SERIES = [
+  { name: "DMs sent", values: [42, 68, 51, 94, 120, 86, 73], tone: "from-accent to-[#e5b3fa]" },
+  { name: "Link clicks", values: [11, 19, 14, 30, 41, 25, 20], tone: "from-[#5b1a7a] to-accent-text" },
+];
+const SCALE_MAX = Math.max(...SERIES.flatMap((s) => s.values));
+---
+<figure class="card glow p-5 sm:p-6" data-chart>
+  <div class="flex items-center justify-between gap-3">
+    <p class="t-sub">Campaign activity</p>
+    <span class="chip text-muted">Example week</span>
+  </div>
+  <div class="mt-6 grid gap-8 sm:grid-cols-2">
+    {SERIES.map((series) => {
+      const total = series.values.reduce((a, b) => a + b, 0);
+      return (
+        <div>
+          <div class="flex items-baseline justify-between gap-3">
+            <p class="text-[0.8125rem] font-semibold">{series.name}</p>
+            <p class="text-[0.8125rem] tabular-nums text-muted"><span data-total={total}>{total.toLocaleString("en-US")}</span> total</p>
+          </div>
+          <div class="mt-4 flex h-32 items-end gap-1.5" aria-hidden="true">
+            {series.values.map((v, i) => (
+              <div class="group relative flex h-full flex-1 items-end">
+                <span
+                  class:list={["block w-full origin-bottom rounded-t-[5px] bg-gradient-to-t", series.tone]}
+                  style={`height:${Math.max((v / SCALE_MAX) * 100, 3)}%`}
+                  data-bar
+                ></span>
+                <span class="pointer-events-none absolute left-1/2 -translate-x-1/2 -translate-y-2 whitespace-nowrap rounded-md bg-raised px-1.5 py-0.5 text-[0.6875rem] tabular-nums opacity-0 transition-opacity group-hover:opacity-100" style={`bottom:${(v / SCALE_MAX) * 100}%`}>
+                  {DAYS[i]} {v}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div class="mt-2 flex gap-1.5 text-center text-[0.6875rem] text-muted" aria-hidden="true">
+            {DAYS.map((d) => <span class="flex-1">{d}</span>)}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+  <figcaption class="mt-5 text-[0.75rem] text-muted">Illustrative data, not results from a real account.</figcaption>
+  <table class="sr-only">
+    <caption>Example week, illustrative data</caption>
+    <thead><tr><th scope="col">Day</th>{SERIES.map((s) => <th scope="col">{s.name}</th>)}</tr></thead>
+    <tbody>{DAYS.map((d, i) => <tr><th scope="row">{d}</th>{SERIES.map((s) => <td>{s.values[i]}</td>)}</tr>)}</tbody>
+  </table>
+</figure>
+
+<script>
+  import { animate, stagger } from "animejs";
+  import { countUp, onceVisible, prefersReducedMotion } from "../scripts/motion";
+
+  document.querySelectorAll<HTMLElement>("[data-chart]").forEach((root) => {
+    if (prefersReducedMotion()) return;
+    const bars = [...root.querySelectorAll<HTMLElement>("[data-bar]")];
+    const totals = [...root.querySelectorAll<HTMLElement>("[data-total]")];
+    bars.forEach((b) => (b.style.transform = "scaleY(0)"));
+    onceVisible(root, () => {
+      animate(bars, { scaleY: [0, 1], duration: 1100, delay: stagger(45), ease: "outElastic(1, .75)" });
+      totals.forEach((t) => countUp(t, Number(t.dataset.total), (n) => Math.round(n).toLocaleString("en-US")));
+    }, 0.4);
+  });
+</script>

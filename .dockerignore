@@ -6,3 +6,5 @@ node_modules
 logs
 *.log
 .DS_Store
+site/node_modules
+public/landing

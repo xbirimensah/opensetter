@@ -1,0 +1,57 @@
+---
+/* One workspace running several client accounts: the account switcher,
+   the team with its roles (owner, admin, member), and a read-only report
+   link for the client. Example names. */
+const accounts = [
+  { initial: "S", handle: "studio.store", active: true },
+  { initial: "M", handle: "maya.co", active: false },
+  { initial: "J", handle: "jordan.home", active: false },
+];
+const team = [
+  { initial: "A", name: "Alex", role: "Owner" },
+  { initial: "R", name: "Riley", role: "Admin" },
+  { initial: "T", name: "Taylor", role: "Member" },
+];
+---
+<figure class="grid gap-4 sm:grid-cols-2">
+  <div class="card glow p-4" data-reveal>
+    <p class="t-label px-1">Instagram accounts</p>
+    <ul class="mt-3 space-y-1">
+      {accounts.map((a) => (
+        <li class:list={["flex items-center gap-3 rounded-[var(--radius-sm)] px-2 py-2 text-[0.875rem]", a.active ? "bg-white/[0.06] font-semibold" : "text-muted"]}>
+          <span class:list={["avatar", a.active && "avatar-brand"]}>{a.initial}</span>
+          <span class="flex-1">{a.handle}</span>
+          {a.active && <svg viewBox="0 0 16 16" class="h-4 w-4 text-accent-text" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg>}
+        </li>
+      ))}
+    </ul>
+  </div>
+  <div class="card glow p-4" data-reveal>
+    <p class="t-label px-1">Team</p>
+    <ul class="mt-3 space-y-1">
+      {team.map((m) => (
+        <li class="flex items-center gap-3 px-2 py-2 text-[0.875rem]">
+          <span class="avatar">{m.initial}</span>
+          <span class="flex-1">{m.name}</span>
+          <span class="chip min-h-6 px-2 text-[0.6875rem] text-muted">{m.role}</span>
+        </li>
+      ))}
+    </ul>
+  </div>
+  <div class="card glow flex flex-wrap items-center justify-between gap-3 p-4 sm:col-span-2" data-reveal>
+    <div class="flex min-w-0 items-center gap-3">
+      <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-white/[0.04] text-accent-text" aria-hidden="true">
+        <svg viewBox="0 0 16 16" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13V8M8 13V3M13 13V6" stroke-linecap="round" /></svg>
+      </span>
+      <div class="min-w-0">
+        <p class="text-[0.875rem] font-semibold">Campaign report: Matrix guide</p>
+        <p class="mt-0.5 truncate text-[0.8125rem] text-muted">Read-only link, no login needed</p>
+      </div>
+    </div>
+    <span class="chip chip-accent normal-case tracking-normal">/reports/Xq3vB9kLm2aT</span>
+  </div>
+  <figcaption class="sr-only">
+    Example agency workspace: three client Instagram accounts, a team with owner, admin and member roles,
+    and a read-only campaign report link for a client.
+  </figcaption>
+</figure>

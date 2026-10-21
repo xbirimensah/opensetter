@@ -1,0 +1,301 @@
+---
+/* The whole product in one phone: one comment followed through to the
+   moment the AI setter takes the conversation. The step list says what
+   OpenSetter did at each beat; story.ts plays it. Example content. */
+
+const steps = [
+  { title: "Someone comments MATRIX", body: "A comment trigger catches the keyword on any post or reel." },
+  { title: "A private reply with a button", body: "Instagram's private reply opens the DM, so the 24h window starts." },
+  { title: "It asks for an email", body: "An input step saves the answer and retries if it is not valid." },
+  { title: "It sends the tracked link", body: "Every click is logged against the flow." },
+  { title: "Your AI setter takes it from there", body: "It answers in your voice, and waits for you when it should." },
+];
+---
+<section id="how" class="container-site overflow-x-clip pb-24 pt-6 sm:pb-36" data-story>
+  <h2 class="sr-only">How it works</h2>
+  <div class="grid items-center gap-4 lg:grid-cols-[minmax(0,1fr)_19.5rem] lg:gap-24">
+    <!-- Step list. Each step is a button: tap to jump, autoplay resumes. -->
+    <ol class="order-2 mx-auto hidden w-full max-w-xl gap-1 lg:order-1 lg:grid" data-steps>
+      {steps.map((step, i) => (
+        <li>
+          <button type="button" class="story-step group" data-step-btn={i} aria-current={i === steps.length - 1 ? "step" : undefined}>
+            <span class="story-num">{i + 1}</span>
+            <span class="min-w-0 flex-1 text-left">
+              <span class="block text-[0.9375rem] font-semibold tracking-[-0.01em] sm:text-base">{step.title}</span>
+              <span class="story-body text-[0.8125rem] leading-5 text-muted sm:text-sm"><span class="min-h-0 overflow-hidden">{step.body}</span></span>
+              <span class="story-bar" aria-hidden="true"><span data-step-progress></span></span>
+            </span>
+          </button>
+        </li>
+      ))}
+    </ol>
+
+    <!-- Phones: Stories-style segments and the current step above the
+         phone, so the caption is never below the fold. -->
+    <div class="order-1 mx-auto w-full max-w-[17.5rem] sm:max-w-[19.5rem] lg:hidden">
+      <div class="flex gap-1">
+        {steps.map((step, i) => (
+          <button type="button" class="flex h-6 flex-1 items-center" data-step-btn={i} data-seg data-title={step.title} aria-label={`Step ${i + 1}: ${step.title}`}>
+            <span class="block h-[3px] w-full overflow-hidden rounded-full bg-white/15">
+              <span class="block h-full w-full rounded-full bg-gradient-to-r from-accent to-[#e5b3fa]" data-step-progress></span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <p class="mt-1 flex min-h-12 items-start justify-center gap-2 text-center text-[0.9375rem] font-semibold tracking-[-0.01em]" aria-live="polite">
+        <span class="text-accent-text tabular-nums" data-step-num>{steps.length}</span>
+        <span data-step-title>{steps[steps.length - 1].title}</span>
+      </p>
+    </div>
+
+    <figure data-story-phone class="relative order-2 mx-auto w-full max-w-[17.5rem] sm:max-w-[19.5rem] lg:order-2">
+      <div class="absolute -inset-10 -z-10 rounded-full bg-[radial-gradient(closest-side,rgb(166_16_223/0.28),transparent)] blur-2xl" aria-hidden="true"></div>
+      <div class="phone" aria-hidden="true">
+        <div class="phone-screen">
+          <div class="phone-island"></div>
+          <div class="flex h-9 items-end justify-between px-7 pb-0.5 text-[0.6875rem] font-semibold">
+            <span>9:41</span>
+            <span class="flex items-center gap-1">
+              <svg viewBox="0 0 18 12" class="h-2.5 w-3.5" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+              <svg viewBox="0 0 26 12" class="h-2.5 w-5" fill="none"><rect x="0.5" y="0.5" width="22" height="11" rx="3.5" stroke="currentColor" stroke-opacity="0.4"/><rect x="2" y="2" width="17" height="8" rx="2" fill="currentColor"/><path d="M24.5 4v4" stroke="currentColor" stroke-opacity="0.4" stroke-linecap="round"/></svg>
+            </span>
+          </div>
+
+          <!-- Scene 1: the post and its comments -->
+          <div class="story-scene" data-scene="comments">
+            <div class="flex items-center gap-2 px-3.5 py-2.5">
+              <span class="avatar avatar-brand h-7 w-7">Y</span>
+              <span class="text-[0.8125rem] font-semibold">your.account</span>
+              <span class="ml-auto text-muted">···</span>
+            </div>
+            <div class="reel relative mx-0 aspect-[4/3.2] overflow-hidden">
+              <div class="absolute inset-0 bg-[radial-gradient(120%_90%_at_20%_10%,#7c1fb3_0%,#2a0b3d_45%,#0b0b0b_100%)]"></div>
+              <div class="bg-dots absolute inset-0 opacity-40"></div>
+              <div class="relative flex h-full flex-col justify-end p-4">
+                <p class="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-white/70">Free guide</p>
+                <p class="mt-1 text-[1.35rem] font-bold leading-[1.05] tracking-[-0.03em]">The Matrix<br />guide</p>
+              </div>
+              <span class="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-full bg-black/40 backdrop-blur">
+                <svg viewBox="0 0 12 12" class="ml-0.5 h-2.5 w-2.5" fill="currentColor"><path d="M2 1.2v9.6c0 .5.5.8.9.5l7.4-4.8a.6.6 0 000-1L2.9.7C2.5.4 2 .7 2 1.2z"/></svg>
+              </span>
+            </div>
+            <p class="px-3.5 pt-2.5 text-[0.75rem] leading-snug"><span class="font-semibold">your.account</span> <span class="text-white/80">Comment MATRIX and I'll send you the guide.</span></p>
+            <div class="mt-3 border-t border-white/10 px-3.5 pt-3">
+              <p class="text-[0.6875rem] font-semibold text-muted">Comments</p>
+              <ul class="mt-2.5 space-y-3" data-comments>
+                <li class="flex items-start gap-2.5">
+                  <span class="avatar">J</span>
+                  <p class="text-[0.75rem] leading-snug"><span class="font-semibold">jordan.home</span> <span class="text-white/70">Saving this 🔥</span></p>
+                </li>
+                <li class="flex items-start gap-2.5" data-new-comment>
+                  <span class="avatar">M</span>
+                  <div class="text-[0.75rem] leading-snug">
+                    <span class="font-semibold">maya.co</span>
+                    <span class="chip chip-accent ml-1 min-h-0 px-2 py-0.5 text-[0.6875rem]" data-keyword>MATRIX</span>
+                    <p class="mt-1 flex items-center gap-1 text-[0.6875rem] text-accent-text" data-replied>
+                      <svg viewBox="0 0 12 12" class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6.5l2.2 2.2L9.5 3.5"/></svg>
+                      Private reply sent
+                    </p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Scene 2: the DM thread -->
+          <div class="story-scene" data-scene="dm">
+            <div class="flex items-center gap-2.5 border-b border-white/10 px-3 py-2">
+              <svg viewBox="0 0 12 12" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7.5 2.5 4 6l3.5 3.5"/></svg>
+              <span class="avatar">M</span>
+              <span class="flex-1">
+                <span class="block text-[0.8125rem] font-semibold leading-tight">maya.co</span>
+                <span class="block text-[0.625rem] text-muted">Instagram</span>
+              </span>
+            </div>
+            <div class="story-thread" data-thread>
+              <p class="bubble-meta self-center" data-msg data-at="1">Replied to your comment: MATRIX</p>
+              <div class="bubble bubble-out" data-msg data-at="1">
+                Hey Maya, want the Matrix guide?
+                <span class="dm-button" data-tap>Yes, send it</span>
+              </div>
+              <p class="bubble bubble-in" data-msg data-at="2">Yes, send it</p>
+              <p class="bubble bubble-out" data-msg data-at="2" data-typed>Where should it go? Drop your email.</p>
+              <p class="bubble bubble-in" data-msg data-at="2">maya@example.com</p>
+              <div class="bubble bubble-out w-[82%]" data-msg data-at="3" data-typed>
+                Here it is.
+                <span class="mt-2 block rounded-xl bg-black/25 px-3 py-2">
+                  <span class="block font-semibold">The Matrix guide</span>
+                  <span class="block truncate text-white/75">yourlink.com/matrix</span>
+                </span>
+              </div>
+              <p class="bubble-meta self-end flex items-center gap-1" data-msg data-at="3">
+                <svg viewBox="0 0 12 12" class="h-3 w-3 text-success" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6.5l2.2 2.2L9.5 3.5"/></svg>
+                Click tracked
+              </p>
+              <p class="bubble bubble-in" data-msg data-at="4">Does this work for coaches too?</p>
+              <p class="bubble-meta self-end flex items-center gap-1 text-accent-text" data-msg data-at="4">
+                <svg viewBox="0 0 12 12" class="h-3 w-3" fill="currentColor"><path d="M6 0l1.3 3.7L11 5l-3.7 1.3L6 10 4.7 6.3 1 5l3.7-1.3z"/></svg>
+                AI setter
+              </p>
+              <p class="bubble bubble-out" data-msg data-at="4" data-typed>It does. What do you coach, and how do people find you today?</p>
+              <div class="typing" data-typing hidden><span></span><span></span><span></span></div>
+            </div>
+            <div class="mx-3 mb-4 mt-2 flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-[0.75rem] text-muted">
+              Message...
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption class="sr-only">
+        Example flow: a comment with the keyword MATRIX gets a private reply with a button,
+        the flow asks for an email, sends a tracked link, then hands the conversation to the AI setter.
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<style>
+  .story-scene {
+    position: absolute;
+    inset: 2.25rem 0 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Without JS (or with reduced motion before the script runs) the DM
+     scene shows, complete. */
+  [data-scene="comments"] {
+    visibility: hidden;
+  }
+
+  .story-thread {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    overflow: hidden;
+    padding: 0.75rem 0.75rem 0;
+  }
+
+  .typing {
+    align-self: flex-end;
+    display: flex;
+    gap: 0.2rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: 1.15rem;
+    border-bottom-right-radius: 0.35rem;
+    background: #2a1036;
+  }
+  .typing span {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 999px;
+    background: #c95ff2;
+    animation: typing 1s infinite ease-in-out;
+  }
+  .typing span:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .typing span:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  @keyframes typing {
+    0%,
+    60%,
+    100% {
+      opacity: 0.35;
+      transform: translateY(0);
+    }
+    30% {
+      opacity: 1;
+      transform: translateY(-2px);
+    }
+  }
+
+  .story-step {
+    display: flex;
+    width: 100%;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    text-align: left;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+      background-color 300ms var(--ease-spring),
+      color 300ms var(--ease-spring);
+  }
+  .story-step:active {
+    transform: scale(0.99);
+  }
+  .story-step[aria-current="step"] {
+    background: rgb(255 255 255 / 0.04);
+    color: #fff;
+  }
+  .story-num {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-border-hover);
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    transition: all 300ms var(--ease-spring);
+  }
+  .story-step[aria-current="step"] .story-num {
+    border-color: transparent;
+    background: var(--color-accent);
+    color: #fff;
+    box-shadow: 0 0 20px rgb(166 16 223 / 0.6);
+  }
+  .story-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows 400ms var(--ease-spring),
+      opacity 300ms var(--ease-spring),
+      margin 400ms var(--ease-spring);
+    overflow: hidden;
+  }
+  .story-step[aria-current="step"] .story-body {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    margin-top: 0.25rem;
+  }
+  .story-bar {
+    display: block;
+    height: 2px;
+    margin-top: 0;
+    transition: margin 400ms var(--ease-spring);
+    border-radius: 999px;
+    background: transparent;
+    overflow: hidden;
+  }
+  .story-step[aria-current="step"] .story-bar {
+    margin-top: 0.75rem;
+    background: rgb(255 255 255 / 0.08);
+  }
+  .story-bar > span {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, #a610df, #e5b3fa);
+  }
+  @media (hover: hover) {
+    .story-step:not([aria-current="step"]):hover {
+      color: #d4d4d4;
+      background: rgb(255 255 255 / 0.02);
+    }
+  }
+</style>
+
+<script>
+  import { initStory } from "../scripts/story";
+  document.querySelectorAll<HTMLElement>("[data-story]").forEach(initStory);
+</script>

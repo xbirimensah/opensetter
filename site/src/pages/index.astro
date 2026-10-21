@@ -1,0 +1,102 @@
+---
+import Base from "../layouts/Base.astro";
+import Header from "../components/Header.astro";
+import Hero from "../components/Hero.astro";
+import PhoneStory from "../components/PhoneStory.astro";
+import Marquee from "../components/Marquee.astro";
+import SectionHead from "../components/SectionHead.astro";
+import FlowCanvas from "../components/FlowCanvas.astro";
+import InboxMock from "../components/InboxMock.astro";
+import AiSetterMock from "../components/AiSetterMock.astro";
+import WeekChart from "../components/WeekChart.astro";
+import Templates from "../components/Templates.astro";
+import Agencies from "../components/Agencies.astro";
+import Security from "../components/Security.astro";
+import Cta from "../components/Cta.astro";
+import Footer from "../components/Footer.astro";
+import { STEP_TYPES, TRIGGERS } from "../lib/flow-types";
+import { getGitHubStars } from "../lib/links";
+
+const stars = await getGitHubStars();
+---
+<Base
+  title="OpenSetter - ManyChat and an AI setter in one"
+  description="ManyChat-style comment-to-DM flows and an AI setter that answers in your voice, in one open source app you host yourself. Built on the official Instagram API."
+>
+  <Header stars={stars} />
+  <main>
+    <Hero />
+    <PhoneStory />
+    <Marquee />
+
+    <section id="flows" class="container-site py-24 sm:py-32">
+      <div class="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+        <div class="space-y-10 lg:order-last">
+          <SectionHead eyebrow="Flows" title="Build it once, as steps." caption="Pick a trigger, chain the steps, hand off to the AI setter." />
+          {[{ label: "step types", items: STEP_TYPES }, { label: "triggers", items: TRIGGERS }].map((group) => (
+            <div data-reveal>
+              <p class="t-label">{group.items.length} {group.label}</p>
+              <ul class="mt-3 flex flex-wrap gap-2">
+                {group.items.map((item) => <li class="chip">{item}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div data-reveal><FlowCanvas /></div>
+      </div>
+    </section>
+
+    <section id="inbox" class="container-site pb-24 sm:pb-32">
+      <div class="grid items-center gap-12 lg:grid-cols-[0.7fr_1.3fr] lg:gap-16">
+        <SectionHead eyebrow="Inbox" title="Every DM in one inbox." caption="Voice notes, cards, photos and files, the way Instagram sends them." />
+        <div data-reveal><InboxMock /></div>
+      </div>
+    </section>
+
+    <section id="ai-setter" class="relative pb-24 sm:pb-32">
+      <div class="pointer-events-none absolute inset-x-0 top-1/2 -z-10 h-[30rem] -translate-y-1/2 bg-[radial-gradient(50%_50%_at_30%_50%,rgb(166_16_223/0.1),transparent)]" aria-hidden="true"></div>
+      <div class="container-site grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+        <SectionHead
+          class="lg:order-last"
+          eyebrow="AI setter"
+          title="It answers in your voice, and knows when to wait."
+          caption="On Auto, replies that pass every check go out. Anything that commits you, like a price or a meeting, waits for your review."
+        />
+        <div data-reveal><AiSetterMock /></div>
+      </div>
+    </section>
+
+    <section id="results" class="container-site pb-24 sm:pb-32">
+      <div class="grid items-center gap-12 lg:grid-cols-[0.7fr_1.3fr] lg:gap-16">
+        <SectionHead eyebrow="Results" title="See what every comment turned into." caption="Sends, skips, failures and link clicks, logged per campaign." />
+        <div data-reveal><WeekChart /></div>
+      </div>
+    </section>
+
+    <section id="templates" class="container-site pb-24 sm:pb-32">
+      <SectionHead eyebrow="Templates" title="Start from a template." caption="Pick one and it is ready for you right after sign-in." />
+      <div class="mt-10"><Templates /></div>
+    </section>
+
+    <section id="agencies" class="container-site pb-24 sm:pb-32">
+      <div class="grid items-center gap-12 lg:grid-cols-[0.7fr_1.3fr] lg:gap-16">
+        <SectionHead eyebrow="Agencies" title="Run it for clients." caption="Multiple Instagram accounts, team roles, and report links clients open without logging in." />
+        <Agencies />
+      </div>
+    </section>
+
+    <section id="security" class="container-site pb-24 sm:pb-32">
+      <SectionHead center eyebrow="Security" title="Built on the official Instagram API." caption="What every install does, out of the box." />
+      <Security />
+    </section>
+
+    <Cta />
+  </main>
+  <Footer />
+</Base>
+
+<script>
+  import { initGlow, initReveal } from "../scripts/motion";
+  initReveal();
+  initGlow();
+</script>

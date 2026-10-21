@@ -1,0 +1,22 @@
+---
+/* Aceternity "infinite moving cards", as chips: every trigger and step
+   type, scrolling. Two copies of the track make the loop seamless; the
+   second is hidden from assistive tech. */
+import { STEP_TYPES, TRIGGERS } from "../lib/flow-types";
+
+const items = [...TRIGGERS.map((t) => ({ kind: "Trigger", label: t })), ...STEP_TYPES.map((s) => ({ kind: "Step", label: s }))];
+---
+<section class="border-y border-border/60 bg-white/[0.012] py-5" aria-label="Triggers and steps">
+  <div class="marquee">
+    {[false, true].map((copy) => (
+      <ul class="marquee-track" aria-hidden={copy ? "true" : undefined}>
+        {items.map((item) => (
+          <li class="chip gap-2 py-1">
+            <span class:list={["h-1.5 w-1.5 rounded-full", item.kind === "Trigger" ? "bg-accent-text" : "bg-white/40"]}></span>
+            {item.label}
+          </li>
+        ))}
+      </ul>
+    ))}
+  </div>
+</section>

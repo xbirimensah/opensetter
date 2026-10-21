@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Astro marketing site has its own toolchain (site/package.json).
+    "site/**",
+    "public/landing/**",
   ]),
 ]);
 

@@ -40,6 +40,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
+  // The landing page is the static Astro site in site/, built into
+  // public/landing by `npm run build:site`.
+  async rewrites() {
+    return { beforeFiles: [{ source: "/", destination: "/landing/index.html" }], afterFiles: [], fallback: [] };
+  },
   // NEXT_DIST_DIR lets several dev servers run from one checkout (Next locks
   // its build folder per server). Production builds keep the default.
   distDir: process.env.NEXT_DIST_DIR || ".next",

@@ -1,0 +1,116 @@
+---
+/* The AI setter's two outcomes on Auto, drawn from the real gates in
+   lib/ai-setter/safety.ts: a reply above the confidence minimum that
+   passes every check is sent; one that commits the owner (price, meeting,
+   logistics) is held for review. Example content and values. */
+const MODES = ["Off", "Draft", "Auto"];
+const CONFIDENCE = 0.91;
+const MINIMUM = 0.8;
+---
+<figure class="card glow flex flex-col gap-4 p-5 sm:p-6" data-setter data-confidence={CONFIDENCE}>
+  <div class="flex items-center justify-between gap-4">
+    <p class="t-label">Mode</p>
+    <div class="relative flex rounded-full border border-border bg-background p-0.5" aria-label="AI setter mode: Auto">
+      <span class="mode-thumb" data-mode-thumb aria-hidden="true"></span>
+      {MODES.map((mode) => (
+        <span class:list={["relative z-10 w-14 rounded-full py-1 text-center text-[0.8125rem] font-semibold transition-colors duration-300", mode === "Auto" ? "text-white" : "text-muted"]} data-mode={mode}>{mode}</span>
+      ))}
+    </div>
+  </div>
+
+  <div class="rounded-[var(--radius-md)] border border-border bg-background/80 p-4" data-reveal>
+    <div class="flex items-center justify-between gap-3">
+      <p class="text-[0.8125rem] font-semibold">Reply to maya.co</p>
+      <span class="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-success" data-sent>
+        <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg>
+        Sent
+      </span>
+    </div>
+    <p class="mt-2.5 text-[0.875rem] leading-6">It does. What do you coach, and how do people find you today?</p>
+    <div class="mt-4">
+      <div class="flex justify-between text-[0.75rem] text-muted">
+        <span>Confidence <span class="tabular-nums text-white" data-conf-value>{CONFIDENCE.toFixed(2)}</span></span>
+        <span>Minimum {MINIMUM.toFixed(2)}</span>
+      </div>
+      <div class="relative mt-1.5 h-1.5 rounded-full bg-border" aria-hidden="true">
+        <span class="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-accent to-[#e5b3fa]" style={`width:${CONFIDENCE * 100}%`} data-conf-bar></span>
+        <span class="absolute -inset-y-1 w-[2px] rounded-full bg-white" style={`left:${MINIMUM * 100}%`}></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-[var(--radius-md)] border border-warning/25 bg-background/80 p-4" data-reveal>
+    <div class="flex items-center justify-between gap-3">
+      <p class="text-[0.8125rem] font-semibold">Reply to sam.fit</p>
+      <span class="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-warning" data-held>
+        <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4.5v4M8 11.2v.1M8 1.8l6.5 11.5h-13z" /></svg>
+        Needs review
+      </span>
+    </div>
+    <p class="mt-2.5 text-[0.875rem] leading-6">Happy to hold a spot for you at the founder price.</p>
+    <p class="mt-3 text-[0.75rem] text-muted">Held: makes a price commitment</p>
+    <div class="mt-4 flex gap-2">
+      <span class="btn btn-primary btn-sm pointer-events-none">Approve</span>
+      <span class="btn btn-secondary btn-sm pointer-events-none">Edit</span>
+    </div>
+  </div>
+  <figcaption class="sr-only">
+    Example: on Auto, a reply with confidence 0.91 against a 0.80 minimum is sent. A reply that makes a
+    price commitment is held with the reason shown, waiting for Approve or Edit.
+  </figcaption>
+</figure>
+
+<style>
+  .mode-thumb {
+    position: absolute;
+    top: 0.125rem;
+    bottom: 0.125rem;
+    left: calc(0.125rem + 7rem);
+    width: 3.5rem;
+    border-radius: 999px;
+    background: var(--color-accent);
+    box-shadow: 0 0 18px -2px rgb(166 16 223 / 0.7);
+  }
+</style>
+
+<script>
+  import { createTimeline } from "animejs";
+  import { countUp, onceVisible, prefersReducedMotion } from "../scripts/motion";
+
+  document.querySelectorAll<HTMLElement>("[data-setter]").forEach((root) => {
+    if (prefersReducedMotion()) return;
+    const thumb = root.querySelector<HTMLElement>("[data-mode-thumb]");
+    const labels = [...root.querySelectorAll<HTMLElement>("[data-mode]")];
+    const bar = root.querySelector<HTMLElement>("[data-conf-bar]");
+    const value = root.querySelector<HTMLElement>("[data-conf-value]");
+    const sent = root.querySelector<HTMLElement>("[data-sent]");
+    const held = root.querySelector<HTMLElement>("[data-held]");
+    const confidence = Number(root.dataset.confidence);
+    if (!thumb || !bar || !value || !sent || !held) return;
+
+    const light = (mode: string) =>
+      labels.forEach((l) => {
+        l.classList.toggle("text-white", l.dataset.mode === mode);
+        l.classList.toggle("text-muted", l.dataset.mode !== mode);
+      });
+
+    // Start on Off, nothing scored yet.
+    thumb.style.transform = "translateX(-7rem)";
+    light("Off");
+    bar.style.width = "0%";
+    value.textContent = "0.00";
+    sent.style.opacity = "0";
+    held.style.opacity = "0";
+
+    onceVisible(root, () => {
+      const step = (x: string, mode: string) => ({ translateX: x, duration: 520, ease: "outBack(1.4)", onBegin: () => light(mode) });
+      createTimeline({ delay: 300 })
+        .add(thumb, step("-3.5rem", "Draft"))
+        .add(thumb, step("0rem", "Auto"), "+=260")
+        .call(() => countUp(value, confidence, (n) => n.toFixed(2), 1200), "+=100")
+        .add(bar, { width: ["0%", `${confidence * 100}%`], duration: 1200, ease: "outExpo" }, "<<")
+        .add(sent, { opacity: [0, 1], scale: [0.6, 1], duration: 500, ease: "outBack(2)" }, "+=50")
+        .add(held, { opacity: [0, 1], translateX: [{ to: -3, duration: 70 }, { to: 3, duration: 70 }, { to: -2, duration: 70 }, { to: 0, duration: 70 }], duration: 400 }, "+=250");
+    }, 0.4);
+  });
+</script>
