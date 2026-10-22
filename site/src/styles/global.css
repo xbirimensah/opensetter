@@ -428,8 +428,8 @@ body {
     box-shadow:
       0 0 0 1px #3a3a3a inset,
       0 0 0 1px #000,
-      0 40px 120px -30px rgb(166 16 223 / 0.45),
-      0 30px 60px -20px rgb(0 0 0 / 0.9);
+      0 0 50px -12px rgb(166 16 223 / 0.45),
+      0 0 120px -20px rgb(166 16 223 / 0.22);
   }
 
   .phone-screen {

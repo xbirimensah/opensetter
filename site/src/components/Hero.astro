@@ -1,6 +1,5 @@
 ---
-import GitHubMark from "./GitHubMark.astro";
-import { GITHUB_URL, appHref } from "../lib/links";
+import { GITHUB_URL } from "../lib/links";
 ---
 <section id="top" class="relative isolate overflow-hidden pb-10 pt-16 sm:pb-16 sm:pt-28">
   <!-- Backdrop: masked grid, a spotlight cone (Aceternity "Spotlight")
@@ -45,11 +44,7 @@ import { GITHUB_URL, appHref } from "../lib/links";
     </p>
 
     <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal>
-      <a href={appHref("/login")} class="btn btn-primary btn-lg btn-orbit w-full sm:w-auto">Get started</a>
-      <a href={GITHUB_URL} class="btn btn-secondary btn-lg w-full sm:w-auto">
-        <GitHubMark />
-        View on GitHub
-      </a>
+      <a href={GITHUB_URL} class="btn btn-primary btn-lg btn-orbit w-full sm:w-auto">Get started</a>
     </div>
   </div>
 </section>

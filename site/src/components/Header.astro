@@ -1,6 +1,6 @@
 ---
 import GitHubMark from "./GitHubMark.astro";
-import { GITHUB_URL, SITE_NAV, appHref, formatStars } from "../lib/links";
+import { GITHUB_URL, SITE_NAV, formatStars } from "../lib/links";
 
 interface Props {
   stars: number | null;
@@ -34,7 +34,6 @@ const { stars } = Astro.props;
         <GitHubMark />
         {stars !== null && <span class="tabular-nums" aria-hidden="true">{formatStars(stars)}</span>}
       </a>
-      <a href={appHref("/login")} class="navlink hidden lg:inline-flex">Sign in</a>
       <button
         type="button"
         class="navlink lg:hidden"
@@ -43,7 +42,7 @@ const { stars } = Astro.props;
       >
         <svg viewBox="0 0 20 20" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3.5 7h13M3.5 13h13" /></svg>
       </button>
-      <a href={appHref("/login")} class="btn btn-primary btn-sm ml-1">Get started</a>
+      <a href={GITHUB_URL} class="btn btn-primary btn-sm ml-1">Get started</a>
     </div>
   </div>
 
@@ -57,7 +56,6 @@ const { stars } = Astro.props;
         <li class="mt-2 border-t border-border pt-2">
           <a href={GITHUB_URL} class="menu-link gap-2" target="_blank" rel="noreferrer"><GitHubMark /> GitHub</a>
         </li>
-        <li><a href={appHref("/login")} class="menu-link">Sign in</a></li>
       </ul>
     </nav>
   </div>

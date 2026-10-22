@@ -1,6 +1,5 @@
 ---
-import GitHubMark from "./GitHubMark.astro";
-import { GITHUB_URL, appHref } from "../lib/links";
+import { GITHUB_URL } from "../lib/links";
 ---
 <section class="container-site pb-24 sm:pb-32">
   <div class="cta card relative isolate overflow-hidden px-6 pb-14 pt-24 text-center sm:px-12 sm:pb-20 sm:pt-32" data-reveal>
@@ -15,8 +14,7 @@ import { GITHUB_URL, appHref } from "../lib/links";
     <h2 class="t-title text-sheen mx-auto max-w-2xl">Turn your next reel’s comments into conversations.</h2>
     <p class="t-lead mx-auto mt-4 max-w-xl">Free and open source. Star it if it saves you a subscription.</p>
     <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-      <a href={appHref("/login")} class="btn btn-primary btn-lg btn-orbit w-full sm:w-auto">Get started</a>
-      <a href={GITHUB_URL} class="btn btn-secondary btn-lg w-full sm:w-auto"><GitHubMark /> View on GitHub</a>
+      <a href={GITHUB_URL} class="btn btn-primary btn-lg btn-orbit w-full sm:w-auto">Get started</a>
     </div>
   </div>
 </section>
