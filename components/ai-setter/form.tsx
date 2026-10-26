@@ -9,6 +9,8 @@ export interface SetterConfigForm {
   persona: string;
   goal: string;
   bookingLink: string;
+  /** Extra link domains for auto-sent drafts, one per line or comma-separated. */
+  allowedLinkDomains: string;
   language: string;
   knowledgeEnabled: boolean;
   styleExamplesEnabled: boolean;
@@ -31,6 +33,7 @@ export const DEFAULT_FORM: SetterConfigForm = {
   persona: "",
   goal: "",
   bookingLink: "",
+  allowedLinkDomains: "",
   language: "",
   knowledgeEnabled: true,
   styleExamplesEnabled: true,
@@ -155,4 +158,12 @@ export function formatDateTime(value: string | null | undefined): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+/** Split the allowed-domains field into entries (commas, spaces or new lines). */
+export function parseDomainList(value: string): string[] {
+  return value
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }

@@ -9,6 +9,7 @@
 import type { DraftReply } from "./types";
 import { isReplyLanguageCompatible, type ChatLanguage } from "./language";
 import { containsSecretMaterial } from "./secret-guard";
+import { DISALLOWED_LINK_REASON, findDisallowedLinks } from "./link-guard";
 
 /** Instagram rejects DM text above 1000 chars; stay under with margin. */
 const MAX_DRAFT_LENGTH = 900;
@@ -188,6 +189,11 @@ export function evaluateAutoSendSafety(params: {
   recentAiReplies?: readonly string[];
   /** Whether there is human-written voice to imitate at all. */
   voiceEvidence?: VoiceEvidence;
+  /**
+   * Hosts a draft may link to (the booking link's host plus the account's
+   * allowlist). Any other link holds the draft.
+   */
+  allowedLinkHosts?: readonly string[];
 }): AutoSendCheck {
   const reasons: string[] = [];
   const incoming = params.incomingText.trim();
@@ -223,6 +229,9 @@ export function evaluateAutoSendSafety(params: {
       reasons.push("draft is a trivial acknowledgement");
     }
     reasons.push(...findOutboundCommitments(draftText));
+    if (findDisallowedLinks(draftText, params.allowedLinkHosts ?? []).length > 0) {
+      reasons.push(DISALLOWED_LINK_REASON);
+    }
   }
   if (
     params.chatLanguage &&

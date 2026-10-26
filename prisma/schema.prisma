@@ -395,6 +395,9 @@ model AiSetterConfig {
   windowNudgeHours   Int      @default(20)
   /// IGSIDs the setter must never reply to.
   blockedUserIds     String[] @default([])
+  /// Domains an auto-sent draft may link to besides the booking link's
+  /// host; any other link holds the draft (lib/ai-setter/link-guard.ts).
+  allowedLinkDomains String[] @default([])
 
   /// Sprachprofil: the owner's editable voice rules. Null uses the
   /// built-in style guide.

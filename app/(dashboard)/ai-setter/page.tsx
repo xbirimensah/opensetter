@@ -19,6 +19,7 @@ import VoiceProfilePanel from "@/components/ai-setter/voice-profile-panel";
 import ModelProviderPanel from "@/components/ai-setter/model-provider-panel";
 import {
   DEFAULT_FORM,
+  parseDomainList,
   SaveBar,
   type SetterConfigForm,
 } from "@/components/ai-setter/form";
@@ -110,6 +111,7 @@ export default function AiSetterPage() {
           persona: config.persona ?? "",
           goal: config.goal ?? "",
           bookingLink: config.bookingLink ?? "",
+          allowedLinkDomains: (config.allowedLinkDomains ?? []).join("\n"),
           language: config.language ?? "",
           knowledgeEnabled: config.knowledgeEnabled,
           styleExamplesEnabled: config.styleExamplesEnabled,
@@ -181,7 +183,7 @@ export default function AiSetterPage() {
           pauseOnHumanReply: form.pauseOnHumanReply,
           windowNudgeEnabled: form.windowNudgeEnabled,
           windowNudgeHours: form.windowNudgeHours,
-          blockedUserIds: [],
+          allowedLinkDomains: parseDomainList(form.allowedLinkDomains),
           voiceRules: form.voiceRules,
           styleCorpusEnabled: form.styleCorpusEnabled,
           strictVoiceEvidence: form.strictVoiceEvidence,

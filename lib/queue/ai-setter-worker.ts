@@ -160,6 +160,7 @@ interface SafetyContext {
   chatLanguage: ChatLanguage;
   recentAiReplies: string[];
   voiceEvidence: VoiceEvidence;
+  allowedLinkHosts: string[];
 }
 
 function safetyContextFor(
@@ -175,6 +176,9 @@ function safetyContextFor(
       corpusEntries: voice.corpusEntryCount,
       strict: config.strictVoiceEvidence ?? false,
     },
+    allowedLinkHosts: [config.bookingLink, ...(config.allowedLinkDomains ?? [])].filter(
+      (entry): entry is string => Boolean(entry)
+    ),
   };
 }
 

@@ -8,6 +8,7 @@ import {
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import { prisma } from "@/lib/db/client";
 import { getKnowledgeBackend } from "@/lib/ai-setter/knowledge";
+import { normalizeAllowedHosts } from "@/lib/ai-setter/link-guard";
 import { MAX_VOICE_RULES_CHARS, SETTER_STYLE_GUIDE } from "@/lib/ai-setter/prompt";
 import { isProviderId, isSelectableProvider, PROVIDER_CATALOG } from "@/lib/ai-setter/providers/catalog";
 import {
@@ -36,7 +37,18 @@ const configSchema = z.object({
   pauseOnHumanReply: z.boolean(),
   windowNudgeEnabled: z.boolean(),
   windowNudgeHours: z.number().int().min(1).max(23),
-  blockedUserIds: z.array(z.string().max(64)).max(500),
+  // Optional: omitted leaves the stored list alone (the settings page has
+  // no block-list editor, so it must never send an empty list).
+  blockedUserIds: z.array(z.string().max(64)).max(500).optional(),
+  // Hosts an auto-sent draft may link to besides the booking link.
+  allowedLinkDomains: z
+    .array(z.string().max(253))
+    .max(50)
+    .refine(
+      (entries) => entries.every((entry) => normalizeAllowedHosts([entry]).length === 1),
+      "Use domains like example.com"
+    )
+    .optional(),
   // Sprachprofil and model selection. Optional so older clients that do
   // not send them leave the stored values alone.
   voiceRules: z.string().max(MAX_VOICE_RULES_CHARS).optional().nullable(),
@@ -64,6 +76,7 @@ const DEFAULT_CONFIG = {
   windowNudgeEnabled: false,
   windowNudgeHours: 20,
   blockedUserIds: [] as string[],
+  allowedLinkDomains: [] as string[],
   voiceRules: null,
   styleCorpusEnabled: true,
   strictVoiceEvidence: false,
@@ -92,6 +105,7 @@ const OPERATIONAL_FIELDS = [
   "persona",
   "goal",
   "bookingLink",
+  "allowedLinkDomains",
   "voiceRules",
   "knowledgeEnabled",
 ] as const;
@@ -231,6 +245,7 @@ export async function PUT(request: NextRequest) {
         persona: true,
         goal: true,
         bookingLink: true,
+        allowedLinkDomains: true,
         voiceRules: true,
         knowledgeEnabled: true,
         llmProvider: true,
@@ -301,7 +316,10 @@ export async function PUT(request: NextRequest) {
     pauseOnHumanReply: parsed.pauseOnHumanReply,
     windowNudgeEnabled: parsed.windowNudgeEnabled,
     windowNudgeHours: parsed.windowNudgeHours,
-    blockedUserIds: parsed.blockedUserIds,
+    ...(parsed.blockedUserIds !== undefined ? { blockedUserIds: parsed.blockedUserIds } : {}),
+    ...(parsed.allowedLinkDomains !== undefined
+      ? { allowedLinkDomains: normalizeAllowedHosts(parsed.allowedLinkDomains) }
+      : {}),
     ...(voiceRules !== undefined ? { voiceRules } : {}),
     ...(parsed.styleCorpusEnabled !== undefined
       ? { styleCorpusEnabled: parsed.styleCorpusEnabled }

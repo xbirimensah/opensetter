@@ -74,6 +74,20 @@ export default function SetupPanel({
             </select>
           </label>
         </div>
+
+        <label className="block">
+          <span className={LABEL_CLASS}>Other allowed link domains</span>
+          <textarea
+            value={form.allowedLinkDomains}
+            onChange={(e) => update("allowedLinkDomains", e.target.value)}
+            rows={2}
+            placeholder={"youtube.com\nyour-site.com"}
+            className={`${INPUT_CLASS} field-sizing-content min-h-12 max-h-48 resize-y`}
+          />
+          <span className="mt-1.5 block text-footnote text-muted">
+            The booking link&apos;s domain is always allowed. A draft with any other link is held for review.
+          </span>
+        </label>
       </section>
 
       <section aria-labelledby="setup-behavior" className="space-y-3">
