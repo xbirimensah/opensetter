@@ -22,7 +22,10 @@ export type AuditAction =
   | "instagram.disconnected"
   | "ai.provider_key_saved"
   | "ai.provider_key_removed"
-  | "ai.setter_mode_changed";
+  | "ai.setter_mode_changed"
+  | "contacts.exported"
+  | "webhooks.endpoint_saved"
+  | "webhooks.endpoint_removed";
 
 export async function audit(event: {
   action: AuditAction;

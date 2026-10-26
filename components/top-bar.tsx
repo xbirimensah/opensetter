@@ -17,6 +17,7 @@ const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/overview": "Overview",
   "/inbox": "Inbox",
+  "/contacts": "Contacts",
   "/ai-setter": "AI Setter",
   "/campaigns/import": "Import Classic Campaigns",
   "/campaigns": "Flows",

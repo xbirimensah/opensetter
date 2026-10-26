@@ -15,6 +15,7 @@ import type { ComponentType } from "react";
 import {
   AiSetterIcon,
   CloseIcon,
+  ContactsIcon,
   DashboardIcon,
   DiagnosticsIcon,
   FlowsIcon,
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: DashboardIcon },
   { label: "Overview", href: "/overview", icon: OverviewIcon },
   { label: "Inbox", href: "/inbox", icon: InboxIcon },
+  { label: "Contacts", href: "/contacts", icon: ContactsIcon },
   { label: "AI Setter", href: "/ai-setter", icon: AiSetterIcon },
   {
     label: "Flows",
@@ -53,8 +55,8 @@ const navItems: NavItem[] = [
 /** Where each group ends: results, conversations, setup. */
 const GROUPS: Array<[number, number]> = [
   [0, 2],
-  [2, 6],
-  [6, 8],
+  [2, 7],
+  [7, 9],
 ];
 
 function matches(pathname: string, prefix: string) {
