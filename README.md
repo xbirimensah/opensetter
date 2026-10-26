@@ -77,6 +77,8 @@ npm run knowledge:ingest -- ./knowledge
 
 That builds a local SQLite knowledge base with locally computed embeddings; the setter starts answering from your facts immediately. Prefer something hosted? Apply [schema/knowledge-base.sql](schema/knowledge-base.sql) to a Supabase project, set the two `SECOND_BRAIN_SUPABASE_*` vars, and the same command ingests there instead. Existing knowledge infrastructure can be plugged in via the `SECOND_BRAIN_*_RPC` overrides. Full details in [docs/ai-setter.md](docs/ai-setter.md). If you skip all of this, the setter still works from persona, goal, and chat history alone.
 
+Zapier, Make or n8n: signed webhooks out and an API in, see [docs/integrations.md](docs/integrations.md). Alerts, backups and health checks for your own server: [docs/operations.md](docs/operations.md).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

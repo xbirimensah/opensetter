@@ -71,6 +71,9 @@ holds the draft for review with the reason attached:
 - no sensitive topics in either direction (payments, legal, medical,
   credentials; German and English patterns)
 - draft under Instagram's length limit; inbound message not a wall of text
+- every link in the draft points at the booking link's domain or a domain
+  you allowed under "Other allowed link domains" (a link the model made up
+  is held)
 
 Independent of mode, the setter never replies when: the thread's AI is
 off, the sender is blocklisted, the message is a bare acknowledgement
