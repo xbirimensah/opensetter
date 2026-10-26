@@ -4,6 +4,7 @@ import { resolveSetterAccount } from "@/lib/ai-setter/route-access";
 import { getConversations, MetaApiError } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
 import { ACTIVE_RUN_STATUSES, coerceKind } from "@/lib/inbox/server";
+import { conversationWhere, hasActiveFilter, parseContactFilter } from "@/lib/inbox/filters";
 import type {
   InboxConversationItem,
   InboxConversationsResponse,
@@ -12,6 +13,12 @@ import type {
 
 /** Newest threads shown in the inbox list. */
 const LIST_LIMIT = 200;
+/** Threads matched by a search before the newest LIST_LIMIT are kept. */
+const SEARCH_CANDIDATES_MAX = 5_000;
+/** "Needs reply" is decided on the last message, so look further back. */
+const NEEDS_REPLY_SCAN = 1_000;
+/** Distinct tags are read from this many tagged contacts at most. */
+const TAG_SCAN_MAX = 2_000;
 
 /**
  * Conversations for the inbox, newest activity first, read from the local
@@ -23,17 +30,33 @@ export async function GET(request: NextRequest) {
   const access = await resolveSetterAccount(request.nextUrl.searchParams.get("instagramAccountId"));
   if (!access.ok) return access.response;
   const { account } = access;
+  const filter = parseContactFilter(request.nextUrl.searchParams);
+  const filtered = hasActiveFilter(filter);
 
   try {
+    // A search narrows the threads first; the list then shows the newest
+    // matches, exactly like the unfiltered inbox.
+    const candidateIds = filtered
+      ? (
+          await prisma.dmConversation.findMany({
+            where: conversationWhere(account.id, filter, { searchMessages: true }),
+            select: { id: true },
+            take: SEARCH_CANDIDATES_MAX,
+          })
+        ).map((row) => row.id)
+      : null;
+
     const latest = await prisma.dmMessage.groupBy({
       by: ["conversationId"],
-      where: { conversation: { instagramAccountId: account.id } },
+      where: candidateIds
+        ? { conversationId: { in: candidateIds } }
+        : { conversation: { instagramAccountId: account.id } },
       _max: { sentAt: true },
       orderBy: { _max: { sentAt: "desc" } },
-      take: LIST_LIMIT,
+      take: filter.status === "needs_reply" ? NEEDS_REPLY_SCAN : LIST_LIMIT,
     });
 
-    if (latest.length === 0) {
+    if (latest.length === 0 && !filtered) {
       return await liveFallback(account);
     }
 
@@ -45,6 +68,7 @@ export async function GET(request: NextRequest) {
           id: true,
           participantId: true,
           participantUsername: true,
+          tags: true,
           flowRuns: {
             where: { status: { in: [...ACTIVE_RUN_STATUSES] } },
             take: 1,
@@ -101,11 +125,31 @@ export async function GET(request: NextRequest) {
               }
             : null,
           hasActiveFlow: conversation.flowRuns.length > 0,
+          tags: conversation.tags,
         },
       ];
     });
 
-    const data: InboxConversationsResponse = { mode: "mirror", conversations: items };
+    // Needs reply: the contact wrote last.
+    const listed = (
+      filter.status === "needs_reply"
+        ? items.filter((item) => item.lastMessage && !item.lastMessage.fromMe && !item.lastMessage.deleted)
+        : items
+    ).slice(0, LIST_LIMIT);
+
+    const tagged = await prisma.dmConversation.findMany({
+      where: { instagramAccountId: account.id, NOT: { tags: { isEmpty: true } } },
+      select: { tags: true },
+      take: TAG_SCAN_MAX,
+    });
+    const availableTags = [...new Set(tagged.flatMap((row) => row.tags))].sort((a, b) => a.localeCompare(b));
+
+    const data: InboxConversationsResponse = {
+      mode: "mirror",
+      conversations: listed,
+      availableTags,
+      filtered,
+    };
     return NextResponse.json({ success: true, data });
   } catch (err) {
     console.error("[Inbox] Conversations error:", err);

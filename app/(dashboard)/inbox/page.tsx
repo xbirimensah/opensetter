@@ -14,7 +14,7 @@
  * is surfaced verbatim when it applies.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import { readCache, writeCache } from "@/lib/client-cache";
 import type {
@@ -27,6 +27,8 @@ import type {
 } from "@/lib/inbox/types";
 import { mergeMessages, oldestCursor } from "@/lib/inbox/thread";
 import ConversationList, { conversationKey } from "@/components/inbox/conversation-list";
+import ListFilters, { EMPTY_LIST_FILTER, type InboxListFilter } from "@/components/inbox/list-filters";
+import { contactFilterParams } from "@/lib/inbox/filters";
 import ThreadView from "@/components/inbox/thread-view";
 import ContactPanel from "@/components/inbox/contact-panel";
 import Sheet from "@/components/inbox/sheet";
@@ -38,6 +40,18 @@ import { PRESS } from "@/components/inbox/ui";
 import { useMediaQuery } from "@/components/inbox/use-media-query";
 
 const POLL_MS = 12_000;
+/** Typing pause before a search hits the server. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+function listQuery(filter: InboxListFilter): string {
+  const params = contactFilterParams({
+    q: filter.q.trim() || undefined,
+    status: filter.status || undefined,
+    tag: filter.tag || undefined,
+  });
+  const query = params.toString();
+  return query ? `&${query}` : "";
+}
 // Cached list/threads are shown instantly on revisit, then revalidated in the
 // background.
 const CACHE_MAX_AGE_MS = 60_000;
@@ -118,13 +132,27 @@ export default function InboxPage() {
   // conversation list immediately, before the account list even loads.
   const [selectedAccountId, setSelectedAccountId] = useState(() => {
     if (typeof window === "undefined") return "";
-    return window.sessionStorage.getItem("inbox:selectedAccount") ?? "";
+    // A link from the Contacts page names the account and contact.
+    const fromLink = new URLSearchParams(window.location.search).get("account");
+    return fromLink || window.sessionStorage.getItem("inbox:selectedAccount") || "";
   });
+  const [pendingContact, setPendingContact] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("contact")
+  );
 
   const [conversations, setConversations] = useState<InboxConversationItem[]>([]);
   const [listMode, setListMode] = useState<InboxMode>("mirror");
   const [convLoading, setConvLoading] = useState(true);
   const [convError, setConvError] = useState<string | null>(null);
+  const [listFilter, setListFilter] = useState<InboxListFilter>(EMPTY_LIST_FILTER);
+  const [appliedFilter, setAppliedFilter] = useState<InboxListFilter>(EMPTY_LIST_FILTER);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  // The filter query the shown list was loaded with.
+  const [loadedQuery, setLoadedQuery] = useState("");
+  // The poll reads the applied filter from here, so changing a filter
+  // reloads the list without resetting the open thread.
+  const filterQueryRef = useRef("");
+  const loadSeqRef = useRef(0);
 
   // Selected by participant, not by id: the id changes if the list switches
   // from live to mirrored, the person does not.
@@ -153,6 +181,7 @@ export default function InboxPage() {
     open: false,
   });
 
+  const isFiltered = listQuery(appliedFilter) !== "";
   const active = conversations.find((c) => conversationKey(c) === activeKey) ?? null;
   const activeId = active?.id ?? null;
   const heldDraftKeys = useMemo(
@@ -187,17 +216,24 @@ export default function InboxPage() {
   const loadConversations = useCallback(
     async (silent: boolean) => {
       if (!selectedAccountId) return;
+      const query = filterQueryRef.current;
+      const seq = ++loadSeqRef.current;
       try {
         const res = await fetch(
-          `/api/inbox/conversations?instagramAccountId=${encodeURIComponent(selectedAccountId)}`,
+          `/api/inbox/conversations?instagramAccountId=${encodeURIComponent(selectedAccountId)}${query}`,
           { cache: "no-store" }
         );
         const payload = await res.json();
+        // A newer request (another filter, a poll) owns the list now.
+        if (seq !== loadSeqRef.current) return;
         if (payload.success) {
           const data = payload.data as InboxConversationsResponse;
           setConversations(data.conversations);
           setListMode(data.mode);
-          writeCache(convCacheKey(selectedAccountId), data);
+          if (data.availableTags) setAvailableTags(data.availableTags);
+          setLoadedQuery(query);
+          // Only the full list is cached for the instant revisit paint.
+          if (!query) writeCache(convCacheKey(selectedAccountId), data);
           setConvError(null);
         } else if (!silent) {
           setConvError(payload.error ?? "Failed to load conversations");
@@ -220,10 +256,10 @@ export default function InboxPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveKey(null);
     setThread(EMPTY_THREAD);
-    const cached = readCache<InboxConversationsResponse>(
-      convCacheKey(selectedAccountId),
-      CACHE_MAX_AGE_MS
-    );
+    // The cache holds the unfiltered list; a search waits for the server.
+    const cached = filterQueryRef.current
+      ? { data: null }
+      : readCache<InboxConversationsResponse>(convCacheKey(selectedAccountId), CACHE_MAX_AGE_MS);
     if (cached.data?.conversations) {
       setConversations(cached.data.conversations);
       setListMode(cached.data.mode);
@@ -236,6 +272,41 @@ export default function InboxPage() {
     const timer = window.setInterval(() => void loadConversations(true), POLL_MS);
     return () => window.clearInterval(timer);
   }, [selectedAccountId, loadConversations]);
+
+  // Open the contact a deep link asked for once the list has it. When it
+  // is older than the newest threads, search for it by its id instead.
+  useEffect(() => {
+    if (!pendingContact || convLoading) return;
+    const item = conversations.find((c) => conversationKey(c) === pendingContact);
+    if (item) {
+      // One-shot hand-off from the link to normal selection state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveKey(pendingContact);
+      setThread(threadFromCache(item.id));
+      setPendingContact(null);
+      window.history.replaceState(null, "", "/inbox");
+    } else if (!listFilter.q) {
+      setListFilter({ ...EMPTY_LIST_FILTER, q: pendingContact });
+    } else if (loadedQuery === listQuery({ ...EMPTY_LIST_FILTER, q: pendingContact })) {
+      // Searched by id and still not there: nothing to open.
+      setPendingContact(null);
+    }
+  }, [pendingContact, conversations, convLoading, listFilter.q, loadedQuery]);
+
+  // Debounce typing; chips and the tag menu apply at once.
+  useEffect(() => {
+    const delay = listFilter.q === appliedFilter.q ? 0 : SEARCH_DEBOUNCE_MS;
+    const timer = window.setTimeout(() => setAppliedFilter(listFilter), delay);
+    return () => window.clearTimeout(timer);
+  }, [listFilter, appliedFilter.q]);
+
+  // A changed filter reloads the list in place; the open thread stays.
+  useEffect(() => {
+    const query = listQuery(appliedFilter);
+    if (query === filterQueryRef.current) return;
+    filterQueryRef.current = query;
+    void loadConversations(true);
+  }, [appliedFilter, loadConversations]);
 
   // AI setter state per thread: mode, toggle, and any held draft. Polled
   // so drafts appear in an open inbox without a reload.
@@ -558,6 +629,9 @@ export default function InboxPage() {
               <h2 className="px-1 text-headline font-semibold text-foreground">Conversations</h2>
             )}
           </div>
+          {listMode === "mirror" && (
+            <ListFilters value={listFilter} tags={availableTags} onChange={setListFilter} />
+          )}
           {listMode === "live" && conversations.length > 0 && (
             <p className="shrink-0 border-b border-border px-4 py-2 text-caption leading-snug text-faint">
               Showing Instagram&apos;s live inbox. Photos, voice notes and contact profiles appear once
@@ -580,7 +654,9 @@ export default function InboxPage() {
             ) : convError ? (
               <p role="alert" className="px-4 py-6 text-sm text-error">{convError}</p>
             ) : conversations.length === 0 ? (
-              <p className="px-4 py-10 text-center text-sm text-muted">No conversations yet.</p>
+              <p className="px-4 py-10 text-center text-sm text-muted">
+                {isFiltered ? "No conversations match." : "No conversations yet."}
+              </p>
             ) : (
               <ConversationList
                 conversations={conversations}

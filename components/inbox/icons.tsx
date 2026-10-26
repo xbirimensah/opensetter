@@ -165,3 +165,10 @@ export const ReplyIcon = (p: IconProps) => (
     <path d="M4 9h10a6 6 0 0 1 6 6v5" />
   </Icon>
 );
+
+export const SearchIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m20 20-4.2-4.2" />
+  </Icon>
+);

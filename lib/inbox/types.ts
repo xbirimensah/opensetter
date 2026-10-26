@@ -53,11 +53,17 @@ export interface InboxConversationItem {
     deleted: boolean;
   } | null;
   hasActiveFlow: boolean;
+  /** Contact tags (mirror mode only). */
+  tags?: string[];
 }
 
 export interface InboxConversationsResponse {
   mode: InboxMode;
   conversations: InboxConversationItem[];
+  /** Every tag used in this account, for the filter menu (mirror mode). */
+  availableTags?: string[];
+  /** True when the list was narrowed by search or filters. */
+  filtered?: boolean;
 }
 
 export type ContactFieldValue = string | number | boolean;
