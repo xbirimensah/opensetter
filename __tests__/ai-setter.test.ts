@@ -236,6 +236,14 @@ describe("prompt assembly", () => {
 });
 
 describe("validateOpenerText", () => {
+  it("reads the opener deadline from env within bounds", async () => {
+    const { openerTimeoutMs } = await import("../lib/ai-setter/campaign-opener");
+    expect(openerTimeoutMs({})).toBe(8000);
+    expect(openerTimeoutMs({ AI_SETTER_OPENER_TIMEOUT_MS: "12000" })).toBe(12000);
+    expect(openerTimeoutMs({ AI_SETTER_OPENER_TIMEOUT_MS: "999999" })).toBe(30000);
+    expect(openerTimeoutMs({ AI_SETTER_OPENER_TIMEOUT_MS: "5" })).toBe(8000);
+  });
+
   it("keeps flow variables intact and refuses invented ones", async () => {
     const { validateOpenerText } = await import("../lib/ai-setter/campaign-opener");
     const template = "Hey {{username}}, die Matrix ist fertig.";

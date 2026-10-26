@@ -203,9 +203,12 @@ export async function PUT(request: NextRequest) {
   let parsed: ConfigPayload;
   try {
     parsed = configSchema.parse(await request.json());
-  } catch {
+  } catch (error) {
+    // Field rules with a readable message (link, domains) reach the form.
+    const issue = error instanceof z.ZodError ? error.issues[0] : undefined;
+    const readable = issue?.code === "custom" ? issue.message : null;
     return NextResponse.json(
-      { success: false, error: "Invalid config payload" },
+      { success: false, error: readable ?? "Invalid config payload" },
       { status: 400 }
     );
   }

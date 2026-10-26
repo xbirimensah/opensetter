@@ -16,8 +16,16 @@ const MAX_OPENER_LENGTH = 800;
 /**
  * The opener runs inline before the comment reply goes out; a slow model
  * must not hold that reply up. After this the static text is sent.
+ * Local CLIs take about 6 to 7 s, so AI_SETTER_OPENER_TIMEOUT_MS can
+ * give them more room.
  */
 export const OPENER_TIMEOUT_MS = 8_000;
+const MAX_OPENER_TIMEOUT_MS = 30_000;
+
+export function openerTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+  const value = Number(env.AI_SETTER_OPENER_TIMEOUT_MS);
+  return Number.isFinite(value) && value >= 1_000 ? Math.min(value, MAX_OPENER_TIMEOUT_MS) : OPENER_TIMEOUT_MS;
+}
 
 export interface PersonalizeOpenerParams {
   /** The campaign's static message, the template to stay faithful to. */
@@ -28,7 +36,7 @@ export interface PersonalizeOpenerParams {
   goal?: string | null;
   /** The account's UI-selected provider; absent uses the env provider. */
   llmSelection?: LlmSelection;
-  /** Overall deadline; defaults to OPENER_TIMEOUT_MS. */
+  /** Overall deadline; defaults to openerTimeoutMs(). */
   timeoutMs?: number;
 }
 
@@ -79,7 +87,7 @@ function buildSystemPrompt(params: PersonalizeOpenerParams): string {
 export async function personalizeCampaignOpener(
   params: PersonalizeOpenerParams
 ): Promise<string | null> {
-  const timeoutMs = params.timeoutMs ?? OPENER_TIMEOUT_MS;
+  const timeoutMs = params.timeoutMs ?? openerTimeoutMs();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<null>((resolve) => {
     timer = setTimeout(() => {

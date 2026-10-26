@@ -46,7 +46,7 @@ export default function ListFilters({
           className="field min-h-10 py-1.5 pl-9"
         />
       </label>
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5" role="group" aria-label="Filter conversations">
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter conversations">
         {STATUS_OPTIONS.map((option) => {
           const selected = value.status === option.value;
           return (

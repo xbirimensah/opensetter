@@ -153,7 +153,7 @@ export function CommentTriggerEditor({
       <Section title="AI opener">
         <ToggleRow
           label="Personalize the first message"
-          description="The AI setter's model rewrites the flow's first message as a reply to what they commented. Falls back to your text after 8 seconds or on any problem."
+          description="The AI setter's model rewrites the flow's first message as a reply to what they commented. Falls back to your text if the model is slow (8 seconds by default) or anything goes wrong."
           on={trigger.aiPersonalizeOpener ?? false}
           onToggle={() => onChange({ ...trigger, aiPersonalizeOpener: !(trigger.aiPersonalizeOpener ?? false) })}
         />
