@@ -15,7 +15,8 @@
     "knowledge:ingest": "tsx scripts/ingest-knowledge.ts",
     "knowledge:check": "tsx scripts/check-knowledge.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "backup": "bash scripts/backup.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

@@ -57,3 +57,6 @@ next-env.d.ts
 
 # Built from site/ (npm run build:site); served at / by a rewrite
 /public/landing/
+
+# Backups (scripts/backup.sh)
+/backups/
