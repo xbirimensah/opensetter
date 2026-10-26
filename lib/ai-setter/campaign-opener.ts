@@ -13,6 +13,11 @@ import { containsSecretMaterial } from "./secret-guard";
 import { requireSelection, resolveLlmTarget, type LlmSelection } from "./providers/resolve";
 
 const MAX_OPENER_LENGTH = 800;
+/**
+ * The opener runs inline before the comment reply goes out; a slow model
+ * must not hold that reply up. After this the static text is sent.
+ */
+export const OPENER_TIMEOUT_MS = 8_000;
 
 export interface PersonalizeOpenerParams {
   /** The campaign's static message, the template to stay faithful to. */
@@ -23,6 +28,8 @@ export interface PersonalizeOpenerParams {
   goal?: string | null;
   /** The account's UI-selected provider; absent uses the env provider. */
   llmSelection?: LlmSelection;
+  /** Overall deadline; defaults to OPENER_TIMEOUT_MS. */
+  timeoutMs?: number;
 }
 
 /**
@@ -68,6 +75,25 @@ function buildSystemPrompt(params: PersonalizeOpenerParams): string {
 export async function personalizeCampaignOpener(
   params: PersonalizeOpenerParams
 ): Promise<string | null> {
+  const timeoutMs = params.timeoutMs ?? OPENER_TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      console.warn(`[ai-setter] opener personalization took over ${timeoutMs} ms, sending the static text`);
+      resolve(null);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([generateOpener(params, timeoutMs), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function generateOpener(
+  params: PersonalizeOpenerParams,
+  timeoutMs: number
+): Promise<string | null> {
   try {
     const userPrompt = [
       "Template to personalize:",
@@ -80,10 +106,13 @@ export async function personalizeCampaignOpener(
     ].join("\n");
 
     const target = await resolveLlmTarget(requireSelection(params.llmSelection));
+    // The provider call gets the same deadline so a CLI process or HTTP
+    // request is killed instead of finishing unseen after the race.
     const raw = await completeSetterPrompt(
       buildSystemPrompt(params),
       userPrompt,
-      target
+      target,
+      { timeoutMs }
     );
     const opener = validateOpenerText(raw, params.baseMessage);
     // Never let model output that looks like a secret reach a commenter.

@@ -41,6 +41,26 @@ const MAX_OUTPUT_TOKENS = 2048;
 const TARGET_MAX_OUTPUT_TOKENS = 4096;
 const MAX_ERROR_BODY_CHARS = 300;
 
+/** Per-call options; the timeout caps every provider (API and CLI). */
+export interface CompletionOptions {
+  timeoutMs?: number;
+}
+
+/**
+ * The setter's system block is per-account and stable across calls
+ * (prompt.ts keeps conversation material in the user turn), so it is
+ * marked for Anthropic prompt caching. Below the model's minimum
+ * cacheable length the marker is ignored and nothing changes.
+ */
+export function cachedSystemBlocks(system: string): Anthropic.TextBlockParam[] {
+  return [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
+}
+
+/** A shortened deadline also skips SDK retries, which would overrun it. */
+function anthropicRequestOptions(timeoutMs: number): Anthropic.RequestOptions {
+  return timeoutMs < HTTP_TIMEOUT_MS ? { timeout: timeoutMs, maxRetries: 0 } : { timeout: timeoutMs };
+}
+
 /** Remove a secret from text before it can reach logs or the database. */
 export function redactSecret(text: string, secret: string): string {
   if (!secret) return text;
@@ -122,7 +142,8 @@ export function assertSafeBaseUrl(baseUrl: string): void {
 async function completeViaAnthropic(
   system: string,
   userPrompt: string,
-  config: SetterLlmConfig
+  config: SetterLlmConfig,
+  timeoutMs: number
 ): Promise<string> {
   const apiKey = resolveApiKey("anthropic");
   if (!apiKey) {
@@ -132,12 +153,15 @@ async function completeViaAnthropic(
   }
 
   const client = new Anthropic({ apiKey });
-  const response = await client.messages.create({
-    model: config.model,
-    max_tokens: MAX_OUTPUT_TOKENS,
-    system,
-    messages: [{ role: "user", content: userPrompt }],
-  });
+  const response = await client.messages.create(
+    {
+      model: config.model,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      system: cachedSystemBlocks(system),
+      messages: [{ role: "user", content: userPrompt }],
+    },
+    anthropicRequestOptions(timeoutMs)
+  );
 
   if (response.stop_reason === "refusal") {
     throw new Error("model declined the request (stop_reason: refusal)");
@@ -152,7 +176,8 @@ async function completeViaAnthropic(
 async function completeViaOpenAiCompatible(
   system: string,
   userPrompt: string,
-  config: SetterLlmConfig
+  config: SetterLlmConfig,
+  timeoutMs: number
 ): Promise<string> {
   const apiKey = resolveApiKey("openai");
   if (!apiKey) {
@@ -177,7 +202,7 @@ async function completeViaOpenAiCompatible(
           { role: "user", content: userPrompt },
         ],
       }),
-      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     }
   );
 
@@ -200,7 +225,8 @@ async function completeViaOpenAiCompatible(
 async function completeViaCli(
   provider: CliProviderId,
   prompt: string,
-  model: string | null
+  model: string | null,
+  timeoutMs: number = CLI_TIMEOUT_MS
 ): Promise<string> {
   if (provider === "codex-cli" && !codexCliEnabled()) {
     throw new Error(`The Codex CLI provider is off; set ${CODEX_CLI_ENV}=on to allow it (it can read files on this server)`);
@@ -210,7 +236,7 @@ async function completeViaCli(
       ? buildCodexCliArgs(prompt, model || null)
       : buildClaudeCliArgs(prompt, model || null);
   const { stdout } = await execFileAsync(resolveCliBin(provider), args, {
-    timeout: CLI_TIMEOUT_MS,
+    timeout: timeoutMs,
     maxBuffer: 1024 * 1024,
     env: cliEnvironment(),
     cwd: cliWorkingDirectory(),
@@ -224,13 +250,14 @@ async function completeViaCli(
 async function postToProvider<T>(
   target: ApiLlmTarget,
   path: string,
-  payload: unknown
+  payload: unknown,
+  timeoutMs: number
 ): Promise<T> {
   const response = await postJsonGuarded(
     `${target.baseUrl}${path}`,
     { Authorization: `Bearer ${target.apiKey}` },
     payload,
-    { timeoutMs: HTTP_TIMEOUT_MS, allowPrivate: isPrivateBaseUrlAllowed() }
+    { timeoutMs, allowPrivate: isPrivateBaseUrlAllowed() }
   );
   if (response.status < 200 || response.status >= 300) {
     const detail = redactSecret(response.body, target.apiKey).slice(0, MAX_ERROR_BODY_CHARS);
@@ -246,15 +273,19 @@ async function postToProvider<T>(
 async function completeTargetViaAnthropic(
   system: string,
   userPrompt: string,
-  target: ApiLlmTarget
+  target: ApiLlmTarget,
+  timeoutMs: number
 ): Promise<string> {
-  const client = new Anthropic({ apiKey: target.apiKey, timeout: HTTP_TIMEOUT_MS });
-  const response = await client.messages.create({
-    model: target.model,
-    max_tokens: TARGET_MAX_OUTPUT_TOKENS,
-    system,
-    messages: [{ role: "user", content: userPrompt }],
-  });
+  const client = new Anthropic({ apiKey: target.apiKey, timeout: timeoutMs });
+  const response = await client.messages.create(
+    {
+      model: target.model,
+      max_tokens: TARGET_MAX_OUTPUT_TOKENS,
+      system: cachedSystemBlocks(system),
+      messages: [{ role: "user", content: userPrompt }],
+    },
+    anthropicRequestOptions(timeoutMs)
+  );
   if (response.stop_reason === "refusal") {
     throw new Error("model declined the request (stop_reason: refusal)");
   }
@@ -276,14 +307,15 @@ interface ResponsesApiOutput {
 async function completeTargetViaResponses(
   system: string,
   userPrompt: string,
-  target: ApiLlmTarget
+  target: ApiLlmTarget,
+  timeoutMs: number
 ): Promise<string> {
   const data = await postToProvider<ResponsesApiOutput>(target, "/responses", {
     model: target.model,
     instructions: system,
     input: userPrompt,
     max_output_tokens: TARGET_MAX_OUTPUT_TOKENS,
-  });
+  }, timeoutMs);
   const text =
     data.output_text ??
     (data.output ?? [])
@@ -299,7 +331,8 @@ async function completeTargetViaResponses(
 async function completeTargetViaChat(
   system: string,
   userPrompt: string,
-  target: ApiLlmTarget
+  target: ApiLlmTarget,
+  timeoutMs: number
 ): Promise<string> {
   const data = await postToProvider<{
     choices?: Array<{ message?: { content?: string } }>;
@@ -309,7 +342,7 @@ async function completeTargetViaChat(
       { role: "system", content: system },
       { role: "user", content: userPrompt },
     ],
-  });
+  }, timeoutMs);
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error(`${target.provider} returned no content`);
   return content;
@@ -318,16 +351,17 @@ async function completeTargetViaChat(
 async function completeWithTarget(
   system: string,
   userPrompt: string,
-  target: ApiLlmTarget
+  target: ApiLlmTarget,
+  timeoutMs: number
 ): Promise<string> {
   try {
     if (target.apiStyle === "anthropic") {
-      return await completeTargetViaAnthropic(system, userPrompt, target);
+      return await completeTargetViaAnthropic(system, userPrompt, target, timeoutMs);
     }
     if (target.apiStyle === "openai-responses") {
-      return await completeTargetViaResponses(system, userPrompt, target);
+      return await completeTargetViaResponses(system, userPrompt, target, timeoutMs);
     }
-    return await completeTargetViaChat(system, userPrompt, target);
+    return await completeTargetViaChat(system, userPrompt, target, timeoutMs);
   } catch (error: unknown) {
     // SDK and fetch errors can echo request details; never let the key
     // travel further than this function.
@@ -339,9 +373,10 @@ async function completeWithTarget(
 function completeWithCliTarget(
   system: string,
   userPrompt: string,
-  target: CliLlmTarget
+  target: CliLlmTarget,
+  timeoutMs: number
 ): Promise<string> {
-  return completeViaCli(target.provider, `${system}\n\n${userPrompt}`, target.model);
+  return completeViaCli(target.provider, `${system}\n\n${userPrompt}`, target.model, timeoutMs);
 }
 
 /**
@@ -353,16 +388,25 @@ function completeWithCliTarget(
 export async function completeSetterPrompt(
   system: string,
   userPrompt: string,
-  target?: LlmTarget | null
+  target?: LlmTarget | null,
+  options: CompletionOptions = {}
 ): Promise<string> {
-  if (target?.kind === "cli") return completeWithCliTarget(system, userPrompt, target);
-  if (target) return completeWithTarget(system, userPrompt, target);
+  if (target?.kind === "cli") {
+    return completeWithCliTarget(system, userPrompt, target, options.timeoutMs ?? CLI_TIMEOUT_MS);
+  }
+  const httpTimeout = options.timeoutMs ?? HTTP_TIMEOUT_MS;
+  if (target) return completeWithTarget(system, userPrompt, target, httpTimeout);
   const config = readSetterLlmConfig();
   if (config.provider === "anthropic") {
-    return completeViaAnthropic(system, userPrompt, config);
+    return completeViaAnthropic(system, userPrompt, config, httpTimeout);
   }
   if (config.provider === "openai") {
-    return completeViaOpenAiCompatible(system, userPrompt, config);
+    return completeViaOpenAiCompatible(system, userPrompt, config, httpTimeout);
   }
-  return completeViaCli(config.provider, `${system}\n\n${userPrompt}`, config.model);
+  return completeViaCli(
+    config.provider,
+    `${system}\n\n${userPrompt}`,
+    config.model,
+    options.timeoutMs ?? CLI_TIMEOUT_MS
+  );
 }

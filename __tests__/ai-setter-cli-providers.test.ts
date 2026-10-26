@@ -371,6 +371,23 @@ describe("CLI selection across setter features", () => {
     expect(args).toEqual(expect.arrayContaining(["--model", "sonnet", "-p"]));
   });
 
+  it("falls back to the static opener when the model is too slow", async () => {
+    // The CLI never answers: the opener must give up on its own deadline
+    // and hand the CLI the same timeout so the process is killed.
+    mocks.execFile.mockImplementation(() => undefined);
+    const started = Date.now();
+    const opener = await personalizeCampaignOpener({
+      baseMessage: "Here is the guide: {link}",
+      commentText: "guide pls",
+      llmSelection: { workspaceId: "ws_1", provider: "claude-cli", model: "sonnet" },
+      timeoutMs: 50,
+    });
+    expect(opener).toBeNull();
+    expect(Date.now() - started).toBeLessThan(2_000);
+    const [, , options] = mocks.execFile.mock.calls[0];
+    expect(options.timeout).toBe(50);
+  });
+
   it("drafts window nudges through the selected CLI using its default model", async () => {
     mocks.execFile.mockImplementation((_bin, _args, _opts, callback) =>
       callback(null, {
