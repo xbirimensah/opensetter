@@ -263,7 +263,8 @@ describe("AI opener on comment triggers", () => {
     const loaded = commentTriggerFromRow(adMatrixRow);
     expect(changedCommentData(adMatrixRow, commentTriggerData({ ...loaded, aiPersonalizeOpener: true }))).toEqual({ aiPersonalizeDm: true });
     // An older editor that never sends the field leaves the stored value alone.
-    const { aiPersonalizeOpener: _omitted, ...withoutField } = commentTriggerFromRow({ ...adMatrixRow, aiPersonalizeDm: true });
+    const withoutField: CommentTrigger = { ...commentTriggerFromRow({ ...adMatrixRow, aiPersonalizeDm: true }) };
+    delete withoutField.aiPersonalizeOpener;
     expect(changedCommentData({ ...adMatrixRow, aiPersonalizeDm: true }, commentTriggerData(withoutField))).toEqual({});
   });
 });

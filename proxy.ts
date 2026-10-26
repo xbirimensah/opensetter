@@ -7,9 +7,10 @@ const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 /**
  * Called by servers, not browsers, and authenticated their own way: Meta
  * webhooks (HMAC signature), schedulers (CRON_SECRET), Auth.js (its own
- * CSRF token). They skip the same-origin check, not the size cap.
+ * CSRF token), the integration API (API keys only, never the session
+ * cookie). They skip the same-origin check, not the size cap.
  */
-const SERVER_TO_SERVER_PREFIXES = ["/api/webhook", "/api/cron/", "/api/auth/"];
+const SERVER_TO_SERVER_PREFIXES = ["/api/webhook", "/api/cron/", "/api/auth/", "/api/v1/"];
 const MEDIA_UPLOAD_PATH = "/api/media";
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 // Uploads are capped at 25 MB (lib/media/storage.ts); multipart adds framing.

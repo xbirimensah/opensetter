@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db/client";
 import { getCurrentWorkspaceContext } from "@/lib/workspace-access";
-import {
-  applyContactPatch,
-  contactPatchSchema,
-  firstIssueMessage,
-} from "@/lib/inbox/contact";
+import { contactPatchSchema, firstIssueMessage } from "@/lib/inbox/contact";
+import { updateContact } from "@/lib/inbox/contact-update";
 import { isPlausibleId, loadInboxContact } from "@/lib/inbox/server";
 import type { InboxContactResponse } from "@/lib/inbox/types";
-
-/** Optimistic-concurrency retries when a flow writes the contact mid-edit. */
-const MAX_ATTEMPTS = 3;
 
 type RouteProps = { params: Promise<{ conversationId: string }> };
 
@@ -51,26 +44,8 @@ export async function PATCH(request: NextRequest, { params }: RouteProps) {
   const parsed = contactPatchSchema.safeParse(body);
   if (!parsed.success) return json(400, firstIssueMessage(parsed.error));
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const current = await prisma.dmConversation.findFirst({
-      where: { id: conversationId, instagramAccount: { workspaceId: context.workspaceId } },
-      select: { id: true, email: true, phone: true, tags: true, customFields: true, updatedAt: true },
-    });
-    if (!current) return json(404, "Conversation not found");
-
-    const result = applyContactPatch(current, parsed.data, new Date());
-    if (!result.ok) return json(400, result.error);
-    if (Object.keys(result.data).length === 0) break;
-
-    const { count } = await prisma.dmConversation.updateMany({
-      where: { id: current.id, updatedAt: current.updatedAt },
-      data: result.data,
-    });
-    if (count === 1) break;
-    if (attempt === MAX_ATTEMPTS) {
-      return json(409, "This contact changed while saving. Try again.");
-    }
-  }
+  const updated = await updateContact(conversationId, context.workspaceId, parsed.data);
+  if (!updated.ok) return json(updated.status, updated.error);
 
   const contact = await loadInboxContact(conversationId, context.workspaceId);
   if (!contact) return json(404, "Conversation not found");

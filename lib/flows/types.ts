@@ -309,7 +309,7 @@ export type EditorTriggerType = EditorTrigger["type"];
 
 /** What started a run. */
 export interface FlowRunContext {
-  trigger: FlowTriggerType | "comment" | "button" | "manual" | "start_flow";
+  trigger: FlowTriggerType | "comment" | "button" | "manual" | "start_flow" | "api";
   /** Comment-started runs: the first send is a private reply to this comment. */
   commentId?: string;
   commentText?: string;

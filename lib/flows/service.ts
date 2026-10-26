@@ -22,6 +22,7 @@ import { FLOW_RESUME_JOB_NAME, getDMQueue } from "@/lib/queue/client";
 import { publicAssetUrl } from "@/lib/media/storage";
 import { getBaseUrl } from "@/lib/env";
 import { personalizeCampaignOpener } from "@/lib/ai-setter/campaign-opener";
+import { emitContactChanges, emitConversationEvent } from "@/lib/integrations/webhooks";
 import { FlowExecutor, type EngineIO, type RunState, type RunStatus } from "./engine";
 import { FlowLockBusyError, withConversationLock } from "./lock";
 import { safeRequest } from "./safe-http";
@@ -229,6 +230,10 @@ function buildIO(params: {
     followsAccount: () => getUserFollowStatus(accessToken(), conversation.participantId),
 
     async updateContact(patch) {
+      const before = await prisma.dmConversation.findUnique({
+        where: { id: conversation.id },
+        select: { email: true, phone: true, tags: true, customFields: true },
+      });
       await prisma.dmConversation.update({
         where: { id: conversation.id },
         data: {
@@ -242,6 +247,8 @@ function buildIO(params: {
             : {}),
         },
       });
+      // Integrations hear about captured emails, new tags and set fields.
+      if (before) void emitContactChanges(conversation.id, before, patch);
     },
 
     async setAiEnabled(enabled) {
@@ -402,7 +409,15 @@ async function withExecutor(params: {
   } finally {
     await persistRun(executor.getState());
   }
-  return { state: executor.getState(), followups };
+  const state = executor.getState();
+  if (state.status === "COMPLETED" && params.run.status !== "COMPLETED") {
+    void emitConversationEvent(params.conversationId, "flow.completed", {
+      flow: { id: params.flow.id, name: params.flow.name },
+      runId: state.id,
+      trigger: state.context.trigger,
+    });
+  }
+  return { state, followups };
 }
 
 async function createRun(flowId: string, conversationId: string, context: FlowRunContext, sends = 0): Promise<RunState> {

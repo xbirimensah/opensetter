@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { SelectChevron, type AccountOption } from "@/components/account-select";
 import { InstagramConnectNotice } from "@/components/instagram-connect-notice";
 import PasswordSettings from "@/components/password-settings";
+import IntegrationsSettings from "@/components/integrations-settings";
 
 interface SettingsData {
   workspace: {
@@ -361,6 +362,8 @@ export default function SettingsPage() {
           )}
         </div>
       </section>
+
+      {canManageMembers && <IntegrationsSettings />}
 
       <section aria-labelledby="settings-usage">
         <h2 id="settings-usage" className="section-title mb-2.5 px-1">

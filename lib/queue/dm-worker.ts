@@ -6,7 +6,9 @@ import {
   INBOUND_DM_JOB_NAME,
   POSTBACK_JOB_NAME,
   REFERRAL_JOB_NAME,
+  WEBHOOK_JOB_NAME,
   WINDOW_NUDGE_JOB_NAME,
+  type DeliverWebhookJob,
   type DmQueueJob,
   type ProcessCommentJob,
   type ProcessFlowResumeJob,
@@ -44,6 +46,7 @@ import {
   reserveWorkspaceDMSend,
 } from "@/lib/billing/usage";
 import { recordWorkerAlert } from "@/lib/ops/worker-health";
+import { deliverWebhook } from "@/lib/integrations/webhooks";
 import {
   buildTrackedUrl,
   renderMessageWithTracking,
@@ -953,6 +956,9 @@ async function processJob(job: Job<DmQueueJob>): Promise<void> {
   if (job.name === WINDOW_NUDGE_JOB_NAME) {
     return processWindowNudge(job as Job<ProcessWindowNudgeJob>);
   }
+  if (job.name === WEBHOOK_JOB_NAME) {
+    return deliverWebhook((job as Job<DeliverWebhookJob>).data);
+  }
   return processComment(job as Job<ProcessCommentJob>);
 }
 
@@ -1027,6 +1033,9 @@ export function createDMWorker(): Worker<DmQueueJob> {
       `[DM Worker] Job ${job?.id} failed (attempt ${job?.attemptsMade}):`,
       err.message
     );
+    // A customer's webhook endpoint being down is recorded on the endpoint
+    // (Settings > Integrations), not raised as a worker failure.
+    if (job?.name === WEBHOOK_JOB_NAME) return;
     void recordWorkerFailure(job, err);
   });
 

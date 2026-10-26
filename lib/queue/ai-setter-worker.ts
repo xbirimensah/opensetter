@@ -8,6 +8,7 @@
  */
 
 import type { Job } from "bullmq";
+import { emitConversationEvent } from "@/lib/integrations/webhooks";
 import { prisma } from "@/lib/db/client";
 import { Prisma } from "@/app/generated/prisma/client";
 import type {
@@ -228,6 +229,14 @@ async function deliverDraft(params: {
     await prisma.aiReplyLog.update({
       where: { id: replyLogId },
       data: { status: "HELD", reasons: [...draft.reasons, ...reasons] },
+    });
+    // Lets a team get pinged (Slack, email) when a reply needs a human.
+    void emitConversationEvent(conversationId, "ai.draft_held", {
+      replyLogId,
+      mode,
+      incomingText,
+      draft: draft.reply,
+      reasons: [...draft.reasons, ...reasons],
     });
     return;
   }

@@ -25,7 +25,9 @@ export type AuditAction =
   | "ai.setter_mode_changed"
   | "contacts.exported"
   | "webhooks.endpoint_saved"
-  | "webhooks.endpoint_removed";
+  | "webhooks.endpoint_removed"
+  | "api_keys.created"
+  | "api_keys.revoked";
 
 export async function audit(event: {
   action: AuditAction;

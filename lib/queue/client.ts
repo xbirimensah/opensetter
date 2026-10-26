@@ -98,19 +98,29 @@ export interface ProcessWindowNudgeJob {
   windowAnchorTs: number;
 }
 
+/** One signed POST of an integration event to one webhook endpoint. */
+export interface DeliverWebhookJob {
+  endpointId: string;
+  /** The JSON body, already serialized, so every retry signs the same bytes. */
+  body: string;
+  eventId: string;
+}
+
 export type DmQueueJob =
   | ProcessCommentJob
   | ProcessPostbackJob
   | ProcessInboundDmJob
   | ProcessWindowNudgeJob
   | ProcessFlowResumeJob
-  | ProcessReferralJob;
+  | ProcessReferralJob
+  | DeliverWebhookJob;
 
 export const POSTBACK_JOB_NAME = "process-postback";
 export const INBOUND_DM_JOB_NAME = "process-inbound-dm";
 export const WINDOW_NUDGE_JOB_NAME = "process-window-nudge";
 export const FLOW_RESUME_JOB_NAME = "process-flow-resume";
 export const REFERRAL_JOB_NAME = "process-referral";
+export const WEBHOOK_JOB_NAME = "deliver-webhook";
 
 let dmQueue: Queue<DmQueueJob> | null = null;
 

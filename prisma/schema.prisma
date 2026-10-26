@@ -92,6 +92,8 @@ model Workspace {
   aiProviderCredentials AiProviderCredential[]
   flows                 Flow[]
   mediaAssets           MediaAsset[]
+  webhookEndpoints      WebhookEndpoint[]
+  apiKeys               ApiKey[]
 
   @@index([ownerId])
 }
@@ -837,4 +839,47 @@ enum MediaKind {
   VIDEO
   AUDIO
   FILE
+}
+
+/// Outgoing webhook: signed POSTs to an external URL (Zapier, Make, n8n)
+/// on contact, flow and AI events. See lib/integrations/webhooks.ts.
+model WebhookEndpoint {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  /// Public https URL; private addresses are refused at send time.
+  url            String
+  /// HMAC-SHA256 signing secret, encrypted with ENCRYPTION_KEY.
+  secret         String
+  /// Subscribed event types (lib/integrations/events.ts WEBHOOK_EVENTS).
+  events         String[]  @default([])
+  isActive       Boolean   @default(true)
+  lastDeliveryAt DateTime?
+  /// HTTP status of the last attempt; 0 when the request itself failed.
+  lastStatus     Int?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+/// Key for the inbound integration API (/api/v1). Only a SHA-256 hash of
+/// the key is stored; the key itself is shown once at creation.
+model ApiKey {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  /// First characters of the key, to tell keys apart in the UI.
+  prefix      String
+  keyHash     String    @unique
+  createdById String?
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }

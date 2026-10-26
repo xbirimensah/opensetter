@@ -109,6 +109,7 @@ vi.mock("@/lib/queue/client", () => ({
   WINDOW_NUDGE_JOB_NAME: "process-window-nudge",
   FLOW_RESUME_JOB_NAME: "process-flow-resume",
   REFERRAL_JOB_NAME: "process-referral",
+  WEBHOOK_JOB_NAME: "deliver-webhook",
 }));
 
 vi.mock("@/lib/flows/service", () => ({
