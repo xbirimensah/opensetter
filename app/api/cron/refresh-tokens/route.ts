@@ -3,6 +3,7 @@ import { rejectUnauthorizedCron } from "@/lib/cron-auth";
 import { prisma } from "@/lib/db/client";
 import { decryptToken, encryptToken } from "@/lib/meta/oauth";
 import { refreshLongLivedToken } from "@/lib/meta/client";
+import { sendOpsAlert } from "@/lib/ops/alerts";
 
 const DAYS_BEFORE_EXPIRY = 10;
 
@@ -87,6 +88,13 @@ export async function GET(request: NextRequest) {
         username: account.username,
         status: "failed",
         error: errorMessage,
+      });
+      // A token that expires stops every automation on the account.
+      await sendOpsAlert({
+        key: `token-refresh:${account.id}`,
+        level: "error",
+        title: `Token refresh failed for @${account.username}`,
+        message: `${errorMessage}\n\nReconnect the account in Settings before the token expires.`,
       });
     }
   }

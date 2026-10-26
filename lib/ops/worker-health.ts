@@ -1,4 +1,5 @@
 import { getRedisConnection } from "@/lib/queue/client";
+import { sendOpsAlert } from "@/lib/ops/alerts";
 
 const WORKER_HEALTH_KEY = "health:worker:dm";
 const WORKER_ALERTS_KEY = "alerts:worker:dm";
@@ -81,6 +82,17 @@ export async function recordWorkerAlert(alert: Omit<WorkerAlert, "createdAt">) {
   const redis = getRedisConnection();
   await redis.lpush(WORKER_ALERTS_KEY, JSON.stringify(payload));
   await redis.ltrim(WORKER_ALERTS_KEY, 0, 24);
+
+  // One push per hour at most for job failures; the Diagnostics page
+  // keeps the full list.
+  if (alert.level === "error") {
+    void sendOpsAlert({
+      key: "worker:job-failed",
+      level: "error",
+      title: "DM worker job failed",
+      message: `${alert.message}${alert.jobId ? `\nJob: ${alert.jobId}` : ""}\n\nMore failures within the hour are only listed on the Diagnostics page.`,
+    }).catch(() => undefined);
+  }
 }
 
 export async function getWorkerAlerts(limit = 10): Promise<WorkerAlert[]> {
