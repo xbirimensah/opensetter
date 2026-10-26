@@ -89,6 +89,12 @@ export interface EngineIO {
   startOtherFlow(flowId: string): Promise<void>;
   mediaUrl(mediaId: string): Promise<string | null>;
   linkUrl(nodeId: string, buttonId: string, url: string): Promise<string>;
+  /**
+   * Rewrite a comment run's first message template as a reply to the
+   * comment; null keeps the template. Optional: tests and old callers
+   * without an AI setter simply never personalize.
+   */
+  personalizeOpener?(template: string, commentText: string): Promise<string | null>;
 }
 
 export const SKIP_BUTTON_ID = "__skip__";
@@ -346,14 +352,16 @@ export class FlowExecutor {
       }
       const gate = await this.gateOrPark(node.id, i);
       if (gate === WAIT || gate === STOP) return gate;
+      const personalized = await this.personalizedContent(content, gate);
       let built: BuiltMessage | null;
       try {
-        built = await buildContentMessage(content, resolvers, i === qrIndex ? node.quickReplies : undefined);
+        built = await buildContentMessage(personalized, resolvers, i === qrIndex ? node.quickReplies : undefined);
       } catch (error) {
         return this.fail(error instanceof Error ? error.message : "Could not build message");
       }
       if (!built) continue;
-      if (!(await this.sendBuilt(built, node.id, gate, { contentId: content.id }))) return STOP;
+      const detail = personalized !== content ? { contentId: content.id, aiOpener: true } : { contentId: content.id };
+      if (!(await this.sendBuilt(built, node.id, gate, detail))) return STOP;
     }
 
     // Quick replies need a plain text block; without one, carry them on a pointer line.
@@ -372,6 +380,28 @@ export class FlowExecutor {
       return this.setWaiting({ kind: "buttons", nodeId: node.id });
     }
     return null;
+  }
+
+  /**
+   * The first text of a comment run with the AI opener on, rewritten to
+   * the comment. Any other content, or a failed rewrite, is unchanged.
+   */
+  private async personalizedContent<C extends MessageNode["contents"][number]>(content: C, gate: "private_reply" | "open"): Promise<C> {
+    const ctx = this.state.context;
+    if (
+      content.type !== "text" ||
+      gate !== "private_reply" ||
+      this.state.sends !== 0 ||
+      ctx.trigger !== "comment" ||
+      !ctx.aiOpener ||
+      !ctx.commentText ||
+      !this.io.personalizeOpener ||
+      !content.text.trim()
+    ) {
+      return content;
+    }
+    const rewritten = await this.io.personalizeOpener(content.text, ctx.commentText).catch(() => null);
+    return rewritten ? { ...content, text: rewritten } : content;
   }
 
   private skipReply(node: InputNode): FlowQuickReply[] | undefined {

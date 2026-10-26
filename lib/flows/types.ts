@@ -296,6 +296,11 @@ export interface CommentTrigger {
   publicReplyEnabled: boolean;
   /** Rotated public replies under the comment. */
   publicReplyMessages: string[];
+  /**
+   * Rewrite the flow's first message per commenter with the AI setter's
+   * model (Automation.aiPersonalizeDm). Absent means off.
+   */
+  aiPersonalizeOpener?: boolean;
 }
 
 /** What the editor and the flow API list as a flow's triggers. */
@@ -310,6 +315,8 @@ export interface FlowRunContext {
   commentText?: string;
   automationId?: string;
   keyword?: string;
+  /** Comment runs: personalize the first message to the comment. */
+  aiOpener?: boolean;
   ref?: string;
   /** Set once the contact replied or tapped (opens the 24h window). */
   interacted?: boolean;

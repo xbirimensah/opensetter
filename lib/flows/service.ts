@@ -21,6 +21,7 @@ import { releaseWorkspaceDMReservation, reserveWorkspaceDMSend } from "@/lib/bil
 import { FLOW_RESUME_JOB_NAME, getDMQueue } from "@/lib/queue/client";
 import { publicAssetUrl } from "@/lib/media/storage";
 import { getBaseUrl } from "@/lib/env";
+import { personalizeCampaignOpener } from "@/lib/ai-setter/campaign-opener";
 import { FlowExecutor, type EngineIO, type RunState, type RunStatus } from "./engine";
 import { FlowLockBusyError, withConversationLock } from "./lock";
 import { safeRequest } from "./safe-http";
@@ -299,6 +300,25 @@ function buildIO(params: {
       return asset ? publicAssetUrl(asset) : null;
     },
 
+    async personalizeOpener(template, commentText) {
+      // Same model, persona and goal as the AI setter for this account.
+      const config = await prisma.aiSetterConfig.findUnique({
+        where: { instagramAccountId: account.id },
+        select: { persona: true, goal: true, llmProvider: true, llmModel: true },
+      });
+      return personalizeCampaignOpener({
+        baseMessage: template,
+        commentText,
+        persona: config?.persona,
+        goal: config?.goal,
+        llmSelection: {
+          workspaceId: account.workspaceId,
+          provider: config?.llmProvider ?? null,
+          model: config?.llmModel ?? null,
+        },
+      });
+    },
+
     async linkUrl(nodeId, buttonId, url) {
       const where = { flowId_nodeId_buttonId: { flowId: flow.id, nodeId, buttonId } };
       let link: { slug: string };
@@ -463,6 +483,8 @@ export async function startFlowFromComment(params: {
   commenterId: string;
   commenterName?: string | null;
   matchedKeyword?: string | null;
+  /** Personalize the flow's first message to this comment (Automation.aiPersonalizeDm). */
+  aiPersonalizeOpener?: boolean;
 }): Promise<RunState> {
   const conversation = await prisma.dmConversation.upsert({
     where: {
@@ -504,6 +526,7 @@ export async function startFlowFromComment(params: {
       commentText: params.commentText,
       automationId: params.automationId,
       keyword: params.matchedKeyword ?? undefined,
+      ...(params.aiPersonalizeOpener ? { aiOpener: true } : {}),
       interacted: false,
     },
   });

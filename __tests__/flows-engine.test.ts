@@ -474,3 +474,46 @@ describe("message builder limits", () => {
     expect(text.endsWith("…")).toBe(true);
   });
 });
+
+describe("FlowExecutor: AI opener for comment runs", () => {
+  const aiRun = (context: Partial<RunState["context"]> = {}) =>
+    run({ context: { trigger: "comment", commentId: "c1", commentText: "Matrix bitte!", interacted: false, aiOpener: true, ...context } });
+
+  it("rewrites only the first private-reply text, then renders its variables", async () => {
+    const calls: [string, string][] = [];
+    const t = makeIO({
+      personalizeOpener: async (template, comment) => {
+        calls.push([template, comment]);
+        return "Klar {{username}}, die Ad-Matrix kommt sofort.";
+      },
+    });
+    const ex = new FlowExecutor({ id: "flow1", name: "Ad-Matrix", graph: AD_MATRIX }, aiRun(), contact(), t.io);
+    await ex.start();
+
+    expect(calls).toEqual([["Hey {{username}}, die Ad-Matrix ist fertig.", "Matrix bitte!"]]);
+    const payload = (t.sent[0].body.attachment as { payload: { text: string } }).payload;
+    expect(payload.text).toBe("Klar lena.coach, die Ad-Matrix kommt sofort.");
+    expect(t.events.find((e) => e.type === "SENT")?.detail).toMatchObject({ aiOpener: true });
+  });
+
+  it("keeps the template when the rewrite fails or is off", async () => {
+    const failing = makeIO({ personalizeOpener: async () => null });
+    await new FlowExecutor({ id: "flow1", name: "Ad-Matrix", graph: AD_MATRIX }, aiRun(), contact(), failing.io).start();
+    expect((failing.sent[0].body.attachment as { payload: { text: string } }).payload.text).toBe("Hey lena.coach, die Ad-Matrix ist fertig.");
+
+    let called = false;
+    const off = makeIO({ personalizeOpener: async () => ((called = true), "x") });
+    await new FlowExecutor({ id: "flow1", name: "Ad-Matrix", graph: AD_MATRIX }, aiRun({ aiOpener: false }), contact(), off.io).start();
+    expect(called).toBe(false);
+  });
+
+  it("survives a throwing rewrite", async () => {
+    const t = makeIO({
+      personalizeOpener: async () => {
+        throw new Error("model down");
+      },
+    });
+    await new FlowExecutor({ id: "flow1", name: "Ad-Matrix", graph: AD_MATRIX }, aiRun(), contact(), t.io).start();
+    expect(t.sent).toHaveLength(1);
+  });
+});

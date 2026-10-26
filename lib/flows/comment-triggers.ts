@@ -71,6 +71,7 @@ export const commentTriggerSchema = z.object({
   wholeWordMatch: z.boolean(),
   publicReplyEnabled: z.boolean(),
   publicReplyMessages: z.array(z.string().max(COMMENT_TRIGGER_LIMITS.publicReplyMax)).max(COMMENT_TRIGGER_LIMITS.publicRepliesMax),
+  aiPersonalizeOpener: z.boolean().optional(),
 });
 
 export function isCommentTrigger(trigger: EditorTrigger): trigger is CommentTrigger {
@@ -207,6 +208,7 @@ export interface CommentAutomationRow {
   publicReplyEnabled: boolean;
   publicReplyMessage: string | null;
   publicReplyMessages: string[];
+  aiPersonalizeDm: boolean;
   updatedAt: Date | string;
 }
 
@@ -225,6 +227,7 @@ export const COMMENT_AUTOMATION_SELECT = {
   publicReplyEnabled: true,
   publicReplyMessage: true,
   publicReplyMessages: true,
+  aiPersonalizeDm: true,
   updatedAt: true,
 } as const;
 
@@ -249,6 +252,7 @@ export function commentTriggerFromRow(row: CommentAutomationRow): CommentTrigger
     wholeWordMatch: row.wholeWordMatch,
     publicReplyEnabled: row.publicReplyEnabled,
     publicReplyMessages: replies,
+    aiPersonalizeOpener: row.aiPersonalizeDm,
   };
 }
 
@@ -263,6 +267,8 @@ export interface CommentTriggerData {
   publicReplyEnabled: boolean;
   publicReplyMessages: string[];
   publicReplyMessage: string | null;
+  /** Absent when the editor did not send the field: the column is left alone. */
+  aiPersonalizeDm?: boolean;
 }
 
 /** Normalized columns for a trigger, with the same consistency rules as the campaign API. */
@@ -282,6 +288,7 @@ export function commentTriggerData(trigger: CommentTrigger): CommentTriggerData 
     publicReplyEnabled: trigger.publicReplyEnabled,
     publicReplyMessages: replies,
     publicReplyMessage: replies[0] ?? null,
+    ...(trigger.aiPersonalizeOpener !== undefined ? { aiPersonalizeDm: trigger.aiPersonalizeOpener } : {}),
   };
 }
 
@@ -303,6 +310,9 @@ export function changedCommentData(row: CommentAutomationRow, data: CommentTrigg
   if (row.matchAnyWord !== data.matchAnyWord) changed.matchAnyWord = data.matchAnyWord;
   if (row.wholeWordMatch !== data.wholeWordMatch) changed.wholeWordMatch = data.wholeWordMatch;
   if (row.publicReplyEnabled !== data.publicReplyEnabled) changed.publicReplyEnabled = data.publicReplyEnabled;
+  if (data.aiPersonalizeDm !== undefined && row.aiPersonalizeDm !== data.aiPersonalizeDm) {
+    changed.aiPersonalizeDm = data.aiPersonalizeDm;
+  }
   const storedReplies = commentTriggerFromRow(row).publicReplyMessages;
   if (row.publicReplyEnabled !== data.publicReplyEnabled || !sameList(storedReplies, data.publicReplyMessages)) {
     if (!sameList(row.publicReplyMessages, data.publicReplyMessages)) changed.publicReplyMessages = data.publicReplyMessages;

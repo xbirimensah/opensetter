@@ -61,6 +61,7 @@ const adMatrixRow = {
   publicReplyEnabled: true,
   publicReplyMessage: null,
   publicReplyMessages: ["Ist raus, schau in deine DMs", "Hab dir geschrieben, check deine Nachrichten"],
+  aiPersonalizeDm: false,
   updatedAt: VERSION,
 };
 
@@ -110,6 +111,7 @@ const loadedTrigger = {
   wholeWordMatch: true,
   publicReplyEnabled: true,
   publicReplyMessages: ["Ist raus, schau in deine DMs", "Hab dir geschrieben, check deine Nachrichten"],
+  aiPersonalizeOpener: false,
 };
 
 beforeEach(() => {

@@ -43,6 +43,7 @@ const adMatrixRow: CommentAutomationRow = {
     "Hab dir geschrieben, check deine Nachrichten",
     "Kommt gerade bei dir an, schau in die DMs",
   ],
+  aiPersonalizeDm: false,
   updatedAt: new Date("2026-10-12T08:00:00.000Z"),
 };
 
@@ -248,5 +249,21 @@ describe("helpers", () => {
         [{ id: "a", name: "Old", postId: "2", matchAnyPost: false, keywords: ["guide"], matchAnyWord: false }]
       )
     ).toEqual([]);
+  });
+});
+
+describe("AI opener on comment triggers", () => {
+  it("maps Automation.aiPersonalizeDm to the trigger and back", () => {
+    const loaded = commentTriggerFromRow({ ...adMatrixRow, aiPersonalizeDm: true });
+    expect(loaded.aiPersonalizeOpener).toBe(true);
+    expect(commentTriggerData(loaded)).toMatchObject({ aiPersonalizeDm: true });
+  });
+
+  it("writes the column only when the editor sent a changed value", () => {
+    const loaded = commentTriggerFromRow(adMatrixRow);
+    expect(changedCommentData(adMatrixRow, commentTriggerData({ ...loaded, aiPersonalizeOpener: true }))).toEqual({ aiPersonalizeDm: true });
+    // An older editor that never sends the field leaves the stored value alone.
+    const { aiPersonalizeOpener: _omitted, ...withoutField } = commentTriggerFromRow({ ...adMatrixRow, aiPersonalizeDm: true });
+    expect(changedCommentData({ ...adMatrixRow, aiPersonalizeDm: true }, commentTriggerData(withoutField))).toEqual({});
   });
 });

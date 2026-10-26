@@ -424,6 +424,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           commenterId,
           commenterName,
           matchedKeyword: matchResult.matchedKeyword,
+          aiPersonalizeOpener: automation.aiPersonalizeDm,
         });
         if (run.sends === 0 && run.status !== "WAITING") {
           // The flow ended without messaging (e.g. a condition path with no

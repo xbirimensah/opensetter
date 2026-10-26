@@ -236,6 +236,14 @@ describe("prompt assembly", () => {
 });
 
 describe("validateOpenerText", () => {
+  it("keeps flow variables intact and refuses invented ones", async () => {
+    const { validateOpenerText } = await import("../lib/ai-setter/campaign-opener");
+    const template = "Hey {{username}}, die Matrix ist fertig.";
+    expect(validateOpenerText("Yo {{ username }}, kommt sofort!", template)).toBe("Yo {{ username }}, kommt sofort!");
+    expect(validateOpenerText("Yo, kommt sofort!", template)).toBeNull();
+    expect(validateOpenerText("Yo {{username}}, {{email}} notiert", template)).toBeNull();
+  });
+
   it("should accept a clean rewrite and strip wrapping quotes", async () => {
     const { validateOpenerText } = await import("../lib/ai-setter/campaign-opener");
     expect(
